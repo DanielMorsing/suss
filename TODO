@@ -1,0 +1,9 @@
+- Set a limit on number of bytes drawn
+- capture stdout/stderr
+- implement mutation + novelty draw
+- implement shrinking
+	- draw substitute
+	- minimizing range
+	- elide element
+- figure out a good solution to saving examples
+- abstract buffers
