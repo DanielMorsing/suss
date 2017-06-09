@@ -1,6 +1,7 @@
 package suss
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -8,15 +9,11 @@ import (
 )
 
 type Generator struct {
-	rnd           *rand.Rand
-	seeder        *rand.Rand
-	t             *testing.T
-	buf           []byte
-	lastBuf       []byte
-	intervalStack []int
-	intervals     [][2]int
-	index         int
-	draw          func(n int, dist Distribution) []byte
+	rnd     *rand.Rand
+	seeder  *rand.Rand
+	t       *testing.T
+	buf     *buffer
+	lastBuf *buffer
 }
 
 func NewTest(t *testing.T) *Generator {
@@ -29,31 +26,33 @@ func NewTest(t *testing.T) *Generator {
 }
 
 func (g *Generator) newData() {
+	fmt.Println("newdata")
 	g.rnd = rand.New(rand.NewSource(int64(g.seeder.Uint64())))
-	g.intervalStack = nil
-	g.intervals = nil
+	g.buf = newBuffer(maxsize, g.regularDraw)
 }
+
+const maxsize = 8 << 10
 
 func (g *Generator) Run(f func()) {
 	g.newData()
 	mutations := 0
 	for {
+		fmt.Println("run")
 		m := g.runOnce(f)
 		if m == modeFailed {
 			break
 		}
 		if mutations >= 10 {
 			g.newData()
-			g.draw = nil
 			mutations = 0
 			continue
 		}
 		mutations++
-		if g.draw == nil {
+		if g.considerNewBuffer() {
 			g.lastBuf = g.buf
 		}
-		g.buf = nil
-		g.draw = g.mutateDraw
+		mut := g.newMutator()
+		g.buf = newBuffer(maxsize, mut)
 	}
 
 	g.t.FailNow()
@@ -69,9 +68,6 @@ const (
 
 func (g *Generator) runOnce(f func()) (m mode) {
 	testfail := true
-	g.index = 0
-	g.intervals = nil
-	g.intervalStack = nil
 	defer func() {
 		r := recover()
 		if r == nil {
@@ -105,17 +101,12 @@ func (g *Generator) Fatalf(format string, i ...interface{}) {
 }
 
 func (g *Generator) Draw(n int, dist Distribution) []byte {
-	var b []byte
-	if g.draw != nil {
-		b = g.draw(n, dist)
-	} else {
-		b = g.regularDraw(n, dist)
-	}
-	g.buf = append(g.buf, b...)
+	b := g.buf.Draw(n, dist)
+	fmt.Println(b)
 	return b
 }
 
-func (g *Generator) regularDraw(n int, dist Distribution) []byte {
+func (g *Generator) regularDraw(_ *buffer, n int, dist Distribution) []byte {
 	b := dist(g.rnd, n)
 	return b
 }
@@ -128,44 +119,120 @@ func Uniform(r *rand.Rand, n int) []byte {
 	return b
 }
 
-func (g *Generator) mutateDraw(n int, dist Distribution) []byte {
-	d := g.seeder.Intn(len(mutateDraws))
-	b := mutateDraws[d](g, n, dist)
-	g.index += n
-	return b
+func (g *Generator) newMutator() drawFunc {
+	mutateDraws := []drawFunc{
+		g.drawNew,
+		g.drawExisting,
+		g.drawLarger,
+		g.drawSmaller,
+		g.drawZero,
+		g.drawConstant,
+		g.flipBit,
+	}
+	return func(b *buffer, n int, dist Distribution) []byte {
+		if b.index+n > len(g.lastBuf.buf) {
+			return dist(g.rnd, n)
+		}
+		d := g.seeder.Intn(len(mutateDraws))
+		byt := mutateDraws[d](b, n, dist)
+		return byt
+	}
+
 }
 
-var mutateDraws = []func(g *Generator, n int, dist Distribution) []byte{
-	(*Generator).drawNew,
-	(*Generator).drawExisting,
-	(*Generator).drawZero,
+func (g *Generator) drawLarger(b *buffer, n int, dist Distribution) []byte {
+	exist := g.lastBuf.buf[b.index : b.index+n]
+	r := dist(g.rnd, n)
+	if bytes.Compare(r, exist) >= 0 {
+		return r
+	}
+	return g.larger(exist)
 }
 
-func (g *Generator) drawNew(n int, dist Distribution) []byte {
+func (g *Generator) drawSmaller(b *buffer, n int, dist Distribution) []byte {
+	exist := g.lastBuf.buf[b.index : b.index+n]
+	r := dist(g.rnd, n)
+	if bytes.Compare(r, exist) <= 0 {
+		return r
+	}
+	return g.smaller(exist)
+}
+
+func (g *Generator) drawNew(b *buffer, n int, dist Distribution) []byte {
 	return dist(g.rnd, n)
 }
 
-func (g *Generator) drawExisting(n int, dist Distribution) []byte {
-	if g.index+n > len(g.lastBuf) {
-		panic(new(eos))
-	}
-	return g.lastBuf[g.index : g.index+n]
+func (g *Generator) drawExisting(b *buffer, n int, dist Distribution) []byte {
+	return g.lastBuf.buf[b.index : b.index+n]
 }
 
-func (g *Generator) drawZero(n int, dist Distribution) []byte {
+func (g *Generator) drawZero(b *buffer, n int, dist Distribution) []byte {
 	return make([]byte, n)
 }
 
+func (g *Generator) drawConstant(b *buffer, n int, dist Distribution) []byte {
+	v := byte(g.rnd.Intn(256))
+	byt := make([]byte, n)
+	for i := 0; i < len(byt); i++ {
+		byt[i] = v
+	}
+	return byt
+}
+
+func (g *Generator) flipBit(b *buffer, n int, dist Distribution) []byte {
+	byt := make([]byte, n)
+	copy(byt, g.lastBuf.buf[b.index:b.index+n])
+	i := g.rnd.Intn(n)
+	k := g.rnd.Intn(8)
+	byt[i] ^= 1 << byte(k)
+	return byt
+}
+
+func (g *Generator) larger(b []byte) []byte {
+	r := make([]byte, len(b))
+	drewlarger := false
+	for i := 0; i < len(b); i++ {
+		if !drewlarger {
+			v := 256 - int(b[i])
+			r[i] = b[i] + byte(g.rnd.Intn(v))
+			if r[i] > b[i] {
+				drewlarger = true
+			}
+		} else {
+			r[i] = byte(g.rnd.Intn(256))
+		}
+	}
+	return r
+}
+
+func (g *Generator) smaller(b []byte) []byte {
+	r := make([]byte, len(b))
+	drewsmaller := false
+	for i := 0; i < len(b); i++ {
+		if !drewsmaller {
+			r[i] = byte(g.rnd.Intn(int(b[i]) + 1))
+			if r[i] < b[i] {
+				drewsmaller = true
+			}
+		} else {
+			r[i] = byte(g.rnd.Intn(256))
+		}
+	}
+	return r
+
+}
+
 func (g *Generator) StartExample() {
-	g.intervalStack = append(g.intervalStack, len(g.buf))
+	g.buf.StartExample()
 }
 
 func (g *Generator) EndExample() {
-	stk := g.intervalStack
-	top := stk[len(stk)-1]
-	g.intervalStack = stk[:len(stk)-1]
-	interval := [2]int{top, len(g.buf)}
-	g.intervals = append(g.intervals, interval)
+	g.buf.EndExample()
+}
+
+func (g *Generator) considerNewBuffer() bool {
+	// TODO: make this actually inspect
+	return true
 }
 
 type eos struct{}
