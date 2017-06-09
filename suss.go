@@ -19,8 +19,9 @@ type Generator struct {
 func NewTest(t *testing.T) *Generator {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	g := &Generator{
-		t:      t,
-		seeder: r,
+		t:       t,
+		seeder:  r,
+		lastBuf: &buffer{},
 	}
 	return g
 }
@@ -38,8 +39,8 @@ func (g *Generator) Run(f func()) {
 	mutations := 0
 	for {
 		fmt.Println("run")
-		m := g.runOnce(f)
-		if m == modeFailed {
+		g.runOnce(f)
+		if g.buf.status == statusInteresting {
 			break
 		}
 		if mutations >= 10 {
@@ -48,7 +49,8 @@ func (g *Generator) Run(f func()) {
 			continue
 		}
 		mutations++
-		if g.considerNewBuffer() {
+		if g.considerNewBuffer(g.buf) {
+			fmt.Println("replaced buf")
 			g.lastBuf = g.buf
 		}
 		mut := g.newMutator()
@@ -58,15 +60,7 @@ func (g *Generator) Run(f func()) {
 	g.t.FailNow()
 }
 
-type mode int
-
-const (
-	modeOK mode = iota
-	modeEOS
-	modeFailed
-)
-
-func (g *Generator) runOnce(f func()) (m mode) {
+func (g *Generator) runOnce(f func()) {
 	testfail := true
 	defer func() {
 		r := recover()
@@ -81,17 +75,20 @@ func (g *Generator) runOnce(f func()) (m mode) {
 		}
 		switch r.(type) {
 		case *eos:
-			m = modeEOS
+			g.buf.status = statusOverrun
 			return
 		case *failed:
-			m = modeFailed
+			g.buf.status = statusInteresting
+			return
+		case *invalid:
+			g.buf.status = statusInvalid
 			return
 		}
 		panic(r)
 	}()
 	f()
+	g.buf.status = statusValid
 	testfail = false
-	return modeOK
 }
 
 func (g *Generator) Fatalf(format string, i ...interface{}) {
@@ -104,6 +101,10 @@ func (g *Generator) Draw(n int, dist Distribution) []byte {
 	b := g.buf.Draw(n, dist)
 	fmt.Println(b)
 	return b
+}
+
+func (g *Generator) Invalid() {
+	panic(new(invalid))
 }
 
 func (g *Generator) regularDraw(_ *buffer, n int, dist Distribution) []byte {
@@ -239,11 +240,22 @@ func (g *Generator) EndExample() {
 	g.buf.EndExample()
 }
 
-func (g *Generator) considerNewBuffer() bool {
-	// TODO: make this actually inspect
+func (g *Generator) considerNewBuffer(b *buffer) bool {
+	if bytes.Compare(g.lastBuf.buf, b.buf) == 0 {
+		return false
+	}
+	if g.lastBuf.status != b.status {
+		return b.status > g.lastBuf.status
+	}
+	if b.status == statusInvalid {
+		return b.index >= g.lastBuf.index
+	}
+	// TODO implement overrun
 	return true
 }
 
 type eos struct{}
 
 type failed struct{}
+
+type invalid struct{}

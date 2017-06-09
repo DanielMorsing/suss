@@ -1,6 +1,7 @@
 package suss
 
 type buffer struct {
+	status        status
 	maxLength     int
 	drawf         drawFunc
 	index         int
@@ -42,3 +43,12 @@ func (b *buffer) EndExample() {
 	interval := [2]int{top, len(b.buf)}
 	b.intervals = append(b.intervals, interval)
 }
+
+type status int
+
+const (
+	statusOverrun status = iota
+	statusInvalid
+	statusValid
+	statusInteresting
+)
