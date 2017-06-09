@@ -27,6 +27,7 @@ func (b *buffer) Draw(n int, dist Distribution) []byte {
 	}
 	byt := b.drawf(b, n, dist)
 	b.buf = append(b.buf, byt...)
+	b.index += n
 	return byt
 }
 

@@ -120,7 +120,7 @@ func Uniform(r *rand.Rand, n int) []byte {
 }
 
 func (g *Generator) newMutator() drawFunc {
-	mutateDraws := []drawFunc{
+	mutateLibrary := []drawFunc{
 		g.drawNew,
 		g.drawExisting,
 		g.drawLarger,
@@ -129,6 +129,15 @@ func (g *Generator) newMutator() drawFunc {
 		g.drawConstant,
 		g.flipBit,
 	}
+	// choose 3 mutation functions and choose randomly
+	// between them on each draw
+	// This is the mutation scheme used by conjecture
+	perm := g.rnd.Perm(len(mutateLibrary))
+	mutateDraws := make([]drawFunc, 3)
+	for i := 0; i < 3; i++ {
+		mutateDraws[i] = mutateLibrary[perm[i]]
+	}
+
 	return func(b *buffer, n int, dist Distribution) []byte {
 		if b.index+n > len(g.lastBuf.buf) {
 			return dist(g.rnd, n)
