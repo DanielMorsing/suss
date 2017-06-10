@@ -10,7 +10,7 @@ type buffer struct {
 	intervals     [][2]int
 }
 
-type drawFunc func(b *buffer, n int, dist Distribution) []byte
+type drawFunc func(b *buffer, n int, smp Sample) []byte
 
 func newBuffer(max int, d drawFunc) *buffer {
 	return &buffer{
@@ -19,14 +19,14 @@ func newBuffer(max int, d drawFunc) *buffer {
 	}
 }
 
-func (b *buffer) Draw(n int, dist Distribution) []byte {
+func (b *buffer) Draw(n int, smp Sample) []byte {
 	if n == 0 {
 		return nil
 	}
 	if b.index+n > b.maxLength {
 		panic(new(eos))
 	}
-	byt := b.drawf(b, n, dist)
+	byt := b.drawf(b, n, smp)
 	b.buf = append(b.buf, byt...)
 	b.index += n
 	return byt

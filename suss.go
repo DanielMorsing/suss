@@ -97,8 +97,8 @@ func (g *Generator) Fatalf(format string, i ...interface{}) {
 	panic(new(failed))
 }
 
-func (g *Generator) Draw(n int, dist Distribution) []byte {
-	b := g.buf.Draw(n, dist)
+func (g *Generator) Draw(n int, smp Sample) []byte {
+	b := g.buf.Draw(n, smp)
 	fmt.Println(b)
 	return b
 }
@@ -107,12 +107,12 @@ func (g *Generator) Invalid() {
 	panic(new(invalid))
 }
 
-func (g *Generator) regularDraw(_ *buffer, n int, dist Distribution) []byte {
-	b := dist(g.rnd, n)
+func (g *Generator) regularDraw(_ *buffer, n int, smp Sample) []byte {
+	b := smp(g.rnd, n)
 	return b
 }
 
-type Distribution func(r *rand.Rand, n int) []byte
+type Sample func(r *rand.Rand, n int) []byte
 
 func Uniform(r *rand.Rand, n int) []byte {
 	b := make([]byte, n)
@@ -139,48 +139,48 @@ func (g *Generator) newMutator() drawFunc {
 		mutateDraws[i] = mutateLibrary[perm[i]]
 	}
 
-	return func(b *buffer, n int, dist Distribution) []byte {
+	return func(b *buffer, n int, smp Sample) []byte {
 		if b.index+n > len(g.lastBuf.buf) {
-			return dist(g.rnd, n)
+			return smp(g.rnd, n)
 		}
 		d := g.seeder.Intn(len(mutateDraws))
-		byt := mutateDraws[d](b, n, dist)
+		byt := mutateDraws[d](b, n, smp)
 		return byt
 	}
 
 }
 
-func (g *Generator) drawLarger(b *buffer, n int, dist Distribution) []byte {
+func (g *Generator) drawLarger(b *buffer, n int, smp Sample) []byte {
 	exist := g.lastBuf.buf[b.index : b.index+n]
-	r := dist(g.rnd, n)
+	r := smp(g.rnd, n)
 	if bytes.Compare(r, exist) >= 0 {
 		return r
 	}
 	return g.larger(exist)
 }
 
-func (g *Generator) drawSmaller(b *buffer, n int, dist Distribution) []byte {
+func (g *Generator) drawSmaller(b *buffer, n int, smp Sample) []byte {
 	exist := g.lastBuf.buf[b.index : b.index+n]
-	r := dist(g.rnd, n)
+	r := smp(g.rnd, n)
 	if bytes.Compare(r, exist) <= 0 {
 		return r
 	}
 	return g.smaller(exist)
 }
 
-func (g *Generator) drawNew(b *buffer, n int, dist Distribution) []byte {
-	return dist(g.rnd, n)
+func (g *Generator) drawNew(b *buffer, n int, smp Sample) []byte {
+	return smp(g.rnd, n)
 }
 
-func (g *Generator) drawExisting(b *buffer, n int, dist Distribution) []byte {
+func (g *Generator) drawExisting(b *buffer, n int, smp Sample) []byte {
 	return g.lastBuf.buf[b.index : b.index+n]
 }
 
-func (g *Generator) drawZero(b *buffer, n int, dist Distribution) []byte {
+func (g *Generator) drawZero(b *buffer, n int, smp Sample) []byte {
 	return make([]byte, n)
 }
 
-func (g *Generator) drawConstant(b *buffer, n int, dist Distribution) []byte {
+func (g *Generator) drawConstant(b *buffer, n int, smp Sample) []byte {
 	v := byte(g.rnd.Intn(256))
 	byt := make([]byte, n)
 	for i := 0; i < len(byt); i++ {
@@ -189,7 +189,7 @@ func (g *Generator) drawConstant(b *buffer, n int, dist Distribution) []byte {
 	return byt
 }
 
-func (g *Generator) flipBit(b *buffer, n int, dist Distribution) []byte {
+func (g *Generator) flipBit(b *buffer, n int, smp Sample) []byte {
 	byt := make([]byte, n)
 	copy(byt, g.lastBuf.buf[b.index:b.index+n])
 	i := g.rnd.Intn(n)
