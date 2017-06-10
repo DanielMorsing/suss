@@ -8,6 +8,8 @@ type buffer struct {
 	buf           []byte
 	intervalStack []int
 	intervals     [][2]int
+	nodeIndex     int
+	hitNovelty    bool
 }
 
 type drawFunc func(b *buffer, n int, smp Sample) []byte
@@ -16,6 +18,7 @@ func newBuffer(max int, d drawFunc) *buffer {
 	return &buffer{
 		maxLength: max,
 		drawf:     d,
+		nodeIndex: -1,
 	}
 }
 

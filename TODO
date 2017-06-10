@@ -1,8 +1,11 @@
-- Set a limit on number of bytes drawn
 - capture stdout/stderr
-- implement mutation + novelty draw
 - implement shrinking
-	- draw substitute
-	- minimizing range
-	- elide element
+	- interval deletes
+	- simpler block replacement (bulk/individual)
+	- simultaneous shrinking
+	- lexicographic minimization of whole buffer
+	- shrinking of individual blocks
+	- reordering blocks
+	- shuffling suffixes
+	
 - figure out a good solution to saving examples

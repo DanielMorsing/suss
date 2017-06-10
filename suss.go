@@ -14,6 +14,7 @@ type Generator struct {
 	t       *testing.T
 	buf     *buffer
 	lastBuf *buffer
+	tree    *bufTree
 }
 
 func NewTest(t *testing.T) *Generator {
@@ -22,6 +23,7 @@ func NewTest(t *testing.T) *Generator {
 		t:       t,
 		seeder:  r,
 		lastBuf: &buffer{},
+		tree:    newBufTree(),
 	}
 	return g
 }
@@ -37,9 +39,10 @@ const maxsize = 8 << 10
 func (g *Generator) Run(f func()) {
 	g.newData()
 	mutations := 0
-	for {
+	for !g.tree.dead[0] {
 		fmt.Println("run")
 		g.runOnce(f)
+		g.tree.add(g.buf)
 		if g.buf.status == statusInteresting {
 			break
 		}
@@ -56,7 +59,6 @@ func (g *Generator) Run(f func()) {
 		mut := g.newMutator()
 		g.buf = newBuffer(maxsize, mut)
 	}
-
 	g.t.FailNow()
 }
 
@@ -107,9 +109,9 @@ func (g *Generator) Invalid() {
 	panic(new(invalid))
 }
 
-func (g *Generator) regularDraw(_ *buffer, n int, smp Sample) []byte {
-	b := smp(g.rnd, n)
-	return b
+func (g *Generator) regularDraw(b *buffer, n int, smp Sample) []byte {
+	res := smp(g.rnd, n)
+	return g.rewriteNovelty(b, res)
 }
 
 type Sample func(r *rand.Rand, n int) []byte
@@ -118,6 +120,60 @@ func Uniform(r *rand.Rand, n int) []byte {
 	b := make([]byte, n)
 	r.Read(b)
 	return b
+}
+
+// in case that we happen across a prefix or extension of a buffer
+// we generated before, rewrite it with something we haven't seen before
+func (g *Generator) rewriteNovelty(b *buffer, result []byte) []byte {
+	idx := b.nodeIndex
+	if idx == -1 {
+		if len(b.buf) != 0 {
+			fmt.Println(b.buf)
+			panic("invalid node index")
+		}
+		b.nodeIndex = 0
+		idx = 0
+	}
+	// we were novel before, stop the search
+	if b.hitNovelty == true {
+		return result
+	}
+	// any opportunity for us to become a dead node
+	// goes through previous nodes and we should have
+	// rewritten that.
+	if g.tree.dead[idx] {
+		panic("dead node")
+	}
+	n := g.tree.nodes[idx]
+	// walk the tree, looking for places where we
+	// would become dead and inserting new values there
+	for i, v := range result {
+		next, ok := n.edges[v]
+		if !ok {
+			b.hitNovelty = true
+			return result
+		}
+		nextn := g.tree.nodes[next]
+		if g.tree.dead[next] {
+			for c := 0; c < 256; c++ {
+				if _, ok := n.edges[byte(c)]; !ok {
+					result[i] = byte(c)
+					b.hitNovelty = true
+					return result
+				}
+				next = n.edges[byte(c)]
+				nextn = g.tree.nodes[next]
+				if !g.tree.dead[next] {
+					result[i] = byte(c)
+					break
+				}
+			}
+		}
+		idx = next
+		n = nextn
+	}
+	b.nodeIndex = idx
+	return result
 }
 
 func (g *Generator) newMutator() drawFunc {
@@ -140,12 +196,14 @@ func (g *Generator) newMutator() drawFunc {
 	}
 
 	return func(b *buffer, n int, smp Sample) []byte {
+		var res []byte
 		if b.index+n > len(g.lastBuf.buf) {
-			return smp(g.rnd, n)
+			res = smp(g.rnd, n)
+		} else {
+			d := g.seeder.Intn(len(mutateDraws))
+			res = mutateDraws[d](b, n, smp)
 		}
-		d := g.seeder.Intn(len(mutateDraws))
-		byt := mutateDraws[d](b, n, smp)
-		return byt
+		return g.rewriteNovelty(b, res)
 	}
 
 }
@@ -173,7 +231,10 @@ func (g *Generator) drawNew(b *buffer, n int, smp Sample) []byte {
 }
 
 func (g *Generator) drawExisting(b *buffer, n int, smp Sample) []byte {
-	return g.lastBuf.buf[b.index : b.index+n]
+	ret := make([]byte, n)
+	copy(ret, g.lastBuf.buf[b.index:b.index+n])
+	return ret
+
 }
 
 func (g *Generator) drawZero(b *buffer, n int, smp Sample) []byte {
