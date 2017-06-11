@@ -44,6 +44,7 @@ func (g *Generator) Run(f func()) {
 		g.runOnce(f)
 		g.tree.add(g.buf)
 		if g.buf.status == statusInteresting {
+			g.lastBuf = g.buf
 			break
 		}
 		if mutations >= 10 {
@@ -59,6 +60,9 @@ func (g *Generator) Run(f func()) {
 		mut := g.newMutator()
 		g.buf = newBuffer(maxsize, mut)
 	}
+	// if we got here, that means that we have an interesting buffer
+	// That usually means a failing test, now try shrinking it
+	// TODO actually do this.
 	g.t.FailNow()
 }
 
@@ -101,7 +105,6 @@ func (g *Generator) Fatalf(format string, i ...interface{}) {
 
 func (g *Generator) Draw(n int, smp Sample) []byte {
 	b := g.buf.Draw(n, smp)
-	fmt.Println(b)
 	return b
 }
 
