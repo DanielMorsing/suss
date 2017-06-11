@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"sort"
 	"testing"
 	"time"
 )
@@ -124,6 +125,32 @@ func (g *Generator) Run(f func()) {
 			g.tryShrink(byt)
 			i++
 		}
+		// replace individual blocks with simpler blocks
+		i = 0
+		for i < len(g.lastBuf.blocks) {
+			uv := g.lastBuf.blocks[i]
+			u, v := uv[0], uv[1]
+			buf := g.lastBuf.buf
+			block := buf[u:v]
+			n := v - u
+			otherblocks := g.lastBuf.blockStarts[n]
+			// find all the blocks simpler than this
+			j := sort.Search(len(otherblocks), func(idx int) bool {
+				v := otherblocks[idx]
+				byt := g.lastBuf.buf[v : v+n]
+				return bytes.Compare(byt, block) >= 0
+			})
+			otherblocks = otherblocks[:j]
+			for _, b := range otherblocks {
+				byt := append([]byte(nil), g.lastBuf.buf...)
+				copy(byt[u:v], g.lastBuf.buf[b:b+n])
+				if g.tryShrink(byt) {
+					break
+				}
+			}
+			i++
+		}
+
 	}
 	g.t.FailNow()
 }

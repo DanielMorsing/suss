@@ -65,7 +65,7 @@ func (g *Generator) Float64() (f float64) {
 		if n != 8 {
 			panic("bad float size")
 		}
-		flavor := r.Intn(4)
+		flavor := r.Intn(5)
 		var f float64
 		switch flavor {
 		case 0:
@@ -74,6 +74,9 @@ func (g *Generator) Float64() (f float64) {
 			f = math.Inf(0)
 		case 2:
 			f = math.Inf(-1)
+		case 3:
+			// TODO incorporate evil floats from hypothesis
+			f = 0
 		default:
 			var b [8]byte
 			r.Read(b[:])

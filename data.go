@@ -1,6 +1,7 @@
 package suss
 
 import (
+	"bytes"
 	"sort"
 )
 
@@ -14,6 +15,7 @@ type buffer struct {
 	overdraw  int
 
 	blocks        [][2]int
+	blockStarts   map[int][]int
 	intervalStack []int
 	intervals     map[[2]int]bool
 	level         int
@@ -30,11 +32,12 @@ type drawFunc func(b *buffer, n int, smp Sample) []byte
 
 func newBuffer(max int, d drawFunc) *buffer {
 	return &buffer{
-		maxLength:  max,
-		drawf:      d,
-		nodeIndex:  -1,
-		intervals:  make(map[[2]int]bool),
-		lastlevels: make(map[int][2]int),
+		maxLength:   max,
+		drawf:       d,
+		nodeIndex:   -1,
+		intervals:   make(map[[2]int]bool),
+		lastlevels:  make(map[int][2]int),
+		blockStarts: make(map[int][]int),
 	}
 }
 
@@ -82,6 +85,8 @@ func (b *buffer) EndExample() {
 		b.intervals[mergeinter] = true
 	}
 	b.lastlevels[b.level] = interval
+	l := b.index - top
+	b.blockStarts[l] = append(b.blockStarts[l], top)
 }
 
 func (b *buffer) finalize() {
@@ -105,6 +110,15 @@ func (b *buffer) finalize() {
 		return si[0] < sj[0]
 	})
 	b.sortedInter = sorted
+	for l, s := range b.blockStarts {
+		sort.Slice(s, func(i, j int) bool {
+			u, v := s[i], s[i]+l
+			ibuf := b.buf[u:v]
+			u, v = s[j], s[j]+l
+			jbuf := b.buf[u:v]
+			return bytes.Compare(ibuf, jbuf) < 0
+		})
+	}
 }
 
 type status int
