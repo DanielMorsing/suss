@@ -99,10 +99,8 @@ func (g *Generator) Run(f func()) {
 			k /= 2
 		}
 		if change != g.change {
-			fmt.Println("changed, try again")
 			continue
 		}
-		fmt.Println("not changed")
 	}
 	g.t.FailNow()
 }
