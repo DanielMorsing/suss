@@ -32,6 +32,13 @@ func newBuffer(max int, d drawFunc) *buffer {
 	}
 }
 
+func bufFromBytes(byt []byte) *buffer {
+	drawfunc := func(b *buffer, n int, _ Sample) []byte {
+		return byt[b.index : b.index+n]
+	}
+	return newBuffer(len(byt), drawfunc)
+}
+
 func (b *buffer) Draw(n int, smp Sample) []byte {
 	if n == 0 {
 		return nil

@@ -15,6 +15,10 @@ type Generator struct {
 	buf     *buffer
 	lastBuf *buffer
 	tree    *bufTree
+
+	testfunc func()
+
+	change int
 }
 
 func NewTest(t *testing.T) *Generator {
@@ -37,11 +41,12 @@ func (g *Generator) newData() {
 const maxsize = 8 << 10
 
 func (g *Generator) Run(f func()) {
+	g.testfunc = f
 	g.newData()
 	mutations := 0
 	for !g.tree.dead[0] {
 		fmt.Println("run")
-		g.runOnce(f)
+		g.runOnce()
 		g.tree.add(g.buf)
 		if g.buf.status == statusInteresting {
 			g.lastBuf = g.buf
@@ -64,10 +69,44 @@ func (g *Generator) Run(f func()) {
 	// That usually means a failing test, now try shrinking it
 	// TODO actually do this.
 	g.lastBuf.finalize()
+	change := -1
+	for g.change > change {
+		change = g.change
+		// structured interval delete
+		k := len(g.lastBuf.sortedInter) / 2
+		for k > 0 {
+			i := 0
+			for i+k <= len(g.lastBuf.sortedInter) {
+				// if I were clever, i'd use some sort of tree
+				// for this
+				elide := make([]bool, len(g.lastBuf.buf))
+				for _, v := range g.lastBuf.sortedInter[i : i+k] {
+					for t := v[0]; t < v[1]; t++ {
+						elide[t] = true
+					}
+				}
+				byt := make([]byte, 0, len(g.lastBuf.buf))
+				for i, v := range g.lastBuf.buf {
+					if elide[i] {
+						continue
+					}
+					byt = append(byt, v)
+				}
+				if !g.tryShrink(byt) {
+					i += k
+				}
+			}
+			k /= 2
+		}
+		if change != g.change {
+			fmt.Println("changed, try again")
+			continue
+		}
+	}
 	g.t.FailNow()
 }
 
-func (g *Generator) runOnce(f func()) {
+func (g *Generator) runOnce() {
 	testfail := true
 	defer func() {
 		r := recover()
@@ -93,9 +132,43 @@ func (g *Generator) runOnce(f func()) {
 		}
 		panic(r)
 	}()
-	f()
+	g.testfunc()
 	g.buf.status = statusValid
 	testfail = false
+}
+
+func (g *Generator) tryShrink(byt []byte) bool {
+	// TODO slice last_data
+	if g.lastBuf.status != statusInteresting {
+		panic("whoa")
+	}
+	i := 0
+	noveledge := false
+	for _, b := range byt {
+		if g.tree.dead[i] {
+			return false
+		}
+		var ok bool
+		i, ok = g.tree.nodes[i].edges[b]
+		if !ok {
+			noveledge = true
+			break
+		}
+	}
+	if !noveledge {
+		return false
+	}
+
+	g.buf = bufFromBytes(byt)
+	g.runOnce()
+	g.tree.add(g.buf)
+	g.buf.finalize()
+	if g.considerNewBuffer(g.buf) {
+		g.change += 1
+		g.lastBuf = g.buf
+		return true
+	}
+	return false
 }
 
 func (g *Generator) Fatalf(format string, i ...interface{}) {
