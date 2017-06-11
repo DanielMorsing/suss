@@ -13,6 +13,7 @@ type buffer struct {
 	buf       []byte
 	overdraw  int
 
+	blocks        [][2]int
 	intervalStack []int
 	intervals     map[[2]int]bool
 	level         int
@@ -48,11 +49,13 @@ func (b *buffer) Draw(n int, smp Sample) []byte {
 	if n == 0 {
 		return nil
 	}
+	initial := b.index
 	if b.index+n > b.maxLength {
 		b.overdraw = (b.index + n) - b.maxLength
 		panic(new(eos))
 	}
 	byt := b.drawf(b, n, smp)
+	b.blocks = append(b.blocks, [2]int{initial, initial + n})
 	b.buf = append(b.buf, byt...)
 	b.index += n
 	return byt

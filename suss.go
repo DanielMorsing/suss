@@ -101,6 +101,29 @@ func (g *Generator) Run(f func()) {
 		if change != g.change {
 			continue
 		}
+		// bulk replacing blocks with simpler blocks
+		i := 0
+		// can't use range here, lastbuf might change
+		for i < len(g.lastBuf.blocks) {
+			uv := g.lastBuf.blocks[i]
+			u, v := uv[0], uv[1]
+			buf := g.lastBuf.buf
+			block := buf[u:v]
+			n := v - u
+
+			byt := make([]byte, len(g.lastBuf.buf))
+			for _, v := range g.lastBuf.blocks {
+				l := v[1] - v[0]
+				origblock := g.lastBuf.buf[v[0]:v[1]]
+				if l == n && (bytes.Compare(origblock, block) > 0) {
+					byt = append(byt, block...)
+				} else {
+					byt = append(byt, origblock...)
+				}
+			}
+			g.tryShrink(byt)
+			i++
+		}
 	}
 	g.t.FailNow()
 }
