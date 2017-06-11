@@ -5,19 +5,24 @@ import (
 )
 
 type buffer struct {
-	status        status
-	maxLength     int
-	drawf         drawFunc
-	index         int
-	buf           []byte
+	status status
+
+	maxLength int
+	drawf     drawFunc
+	index     int
+	buf       []byte
+	overdraw  int
+
 	intervalStack []int
 	intervals     map[[2]int]bool
 	level         int
 	lastlevels    map[int][2]int
-	nodeIndex     int
-	hitNovelty    bool
-	finalized     bool
-	sortedInter   [][2]int
+
+	nodeIndex  int
+	hitNovelty bool
+	finalized  bool
+
+	sortedInter [][2]int
 }
 
 type drawFunc func(b *buffer, n int, smp Sample) []byte
@@ -44,6 +49,7 @@ func (b *buffer) Draw(n int, smp Sample) []byte {
 		return nil
 	}
 	if b.index+n > b.maxLength {
+		b.overdraw = (b.index + n) - b.maxLength
 		panic(new(eos))
 	}
 	byt := b.drawf(b, n, smp)

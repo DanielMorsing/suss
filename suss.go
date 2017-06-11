@@ -102,6 +102,7 @@ func (g *Generator) Run(f func()) {
 			fmt.Println("changed, try again")
 			continue
 		}
+		fmt.Println("not changed")
 	}
 	g.t.FailNow()
 }
@@ -388,7 +389,12 @@ func (g *Generator) considerNewBuffer(b *buffer) bool {
 	if b.status == statusInvalid {
 		return b.index >= g.lastBuf.index
 	}
-	// TODO implement overrun
+	if b.status == statusOverrun {
+		return b.overdraw < g.lastBuf.overdraw
+	}
+	if b.status == statusInteresting {
+		// TODO add assertions here
+	}
 	return true
 }
 
