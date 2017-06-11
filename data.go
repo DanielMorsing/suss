@@ -1,5 +1,9 @@
 package suss
 
+import (
+	"sort"
+)
+
 type buffer struct {
 	status        status
 	maxLength     int
@@ -13,6 +17,7 @@ type buffer struct {
 	nodeIndex     int
 	hitNovelty    bool
 	finalized     bool
+	sortedInter   [][2]int
 }
 
 type drawFunc func(b *buffer, n int, smp Sample) []byte
@@ -64,8 +69,26 @@ func (b *buffer) EndExample() {
 }
 
 func (b *buffer) finalize() {
+	if b.finalized {
+		return
+	}
 	b.finalized = true
-
+	sorted := make([][2]int, 0, len(b.intervals))
+	for v := range b.intervals {
+		sorted = append(sorted, v)
+	}
+	// sort intervals by length, then earliest position at start
+	sort.Slice(sorted, func(i, j int) bool {
+		si := sorted[i]
+		sj := sorted[j]
+		li := si[1] - si[0]
+		lj := sj[1] - sj[0]
+		if li != lj {
+			return lj < li
+		}
+		return si[0] < sj[0]
+	})
+	b.sortedInter = sorted
 }
 
 type status int

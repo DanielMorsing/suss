@@ -63,6 +63,7 @@ func (g *Generator) Run(f func()) {
 	// if we got here, that means that we have an interesting buffer
 	// That usually means a failing test, now try shrinking it
 	// TODO actually do this.
+	g.lastBuf.finalize()
 	g.t.FailNow()
 }
 
