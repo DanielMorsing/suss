@@ -1,5 +1,5 @@
 Suspicion
-
+----------
 Suspicion is a property-based testing library for Go.
 
 Property testing?
@@ -49,5 +49,5 @@ invalid sort len=13, [NaN 0 0 0 0 4.394777251413336e+230 0 0 0 0 0 0 0]
 
 In this case, we find that a 13 length slice with a NaN and a non-zero value results in a invalid sort. Note that this condition doesn't fail with a 12 length array. Go uses a different sort algorithm for smaller slices and because of the float comparisons involved, it sorts NaNs at the end of the slice.
 
-Suspicion is heavily influenced by the python library Hypothesis. [http://hypothesis.works/](Their website) has a lot of useful information on what property-based testing is and how to use it effectively.
+Suspicion is heavily influenced by the python library Hypothesis. [Their website](http://hypothesis.works/) has a lot of useful information on what property-based testing is and how to use it effectively.
 
