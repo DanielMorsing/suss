@@ -1,8 +1,5 @@
 - capture stdout/stderr
 - implement shrinking
-	- interval deletes
-	- simpler block replacement (bulk/individual)
-	- simultaneous shrinking
 	- lexicographic minimization of whole buffer
 	- shrinking of individual blocks
 	- reordering blocks
