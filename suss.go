@@ -17,7 +17,8 @@ type Generator struct {
 	lastBuf *buffer
 	tree    *bufTree
 
-	testfunc func()
+	testfunc  func()
+	startTime time.Time
 
 	change int
 }
@@ -34,7 +35,6 @@ func NewTest(t *testing.T) *Generator {
 }
 
 func (g *Generator) newData() {
-	fmt.Println("newdata")
 	g.rnd = rand.New(rand.NewSource(int64(g.seeder.Uint64())))
 	g.buf = newBuffer(maxsize, g.regularDraw)
 }
@@ -42,16 +42,19 @@ func (g *Generator) newData() {
 const maxsize = 8 << 10
 
 func (g *Generator) Run(f func()) {
+	g.startTime = time.Now()
 	g.testfunc = f
 	g.newData()
 	mutations := 0
 	for !g.tree.dead[0] {
-		fmt.Println("run")
 		g.runOnce()
 		g.tree.add(g.buf)
 		if g.buf.status == statusInteresting {
 			g.lastBuf = g.buf
 			break
+		}
+		if time.Since(g.startTime) > 1*time.Second {
+			return
 		}
 		if mutations >= 10 {
 			g.newData()
@@ -60,7 +63,6 @@ func (g *Generator) Run(f func()) {
 		}
 		mutations++
 		if g.considerNewBuffer(g.buf) {
-			fmt.Println("replaced buf")
 			g.lastBuf = g.buf
 		}
 		mut := g.newMutator()
@@ -68,8 +70,21 @@ func (g *Generator) Run(f func()) {
 	}
 	// if we got here, that means that we have an interesting buffer
 	// That usually means a failing test, now try shrinking it
-	// TODO actually do this.
 	g.lastBuf.finalize()
+	g.shrink()
+	g.t.FailNow()
+}
+
+func (g *Generator) shrink() {
+	defer func() {
+		r := recover()
+		if _, ok := r.(*complete); ok {
+			return
+		} else if r != nil {
+			panic(r)
+		}
+	}()
+	g.startTime = time.Now()
 	change := -1
 	for g.change > change {
 		change = g.change
@@ -150,9 +165,31 @@ func (g *Generator) Run(f func()) {
 			}
 			i++
 		}
+		blockChanged := -1
+		for blockChanged != g.change {
+			blockChanged = g.change
+			blocks := make(map[string][][2]int)
+			buf := append([]byte(nil), g.lastBuf.buf...)
+			for _, v := range g.lastBuf.blocks {
+				s := string(g.lastBuf.buf[v[0]:v[1]])
+				blocks[s] = append(blocks[s], v)
+			}
+			for k, v := range blocks {
+				if len(v) == 1 {
+					delete(blocks, k)
+				}
+			}
+			for k, s := range blocks {
+				minimize([]byte(k), func(b []byte) bool {
+					for _, v := range s {
+						copy(buf[v[0]:v[1]], b)
+					}
+					return g.tryShrink(buf)
+				}, false)
+			}
+		}
 
 	}
-	g.t.FailNow()
 }
 
 func (g *Generator) runOnce() {
@@ -191,6 +228,7 @@ func (g *Generator) tryShrink(byt []byte) bool {
 	if g.lastBuf.status != statusInteresting {
 		panic("whoa")
 	}
+
 	i := 0
 	noveledge := false
 	for _, b := range byt {
@@ -451,3 +489,5 @@ type eos struct{}
 type failed struct{}
 
 type invalid struct{}
+
+type complete struct{}

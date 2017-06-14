@@ -41,6 +41,9 @@ func (m *minimizer) run() {
 		}
 		return
 	}
+	if isZero(m.current) {
+		return
+	}
 	// try zeroing
 	byt := make([]byte, m.length)
 	if m.test(byt) {
