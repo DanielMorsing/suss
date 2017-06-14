@@ -188,7 +188,11 @@ func (g *Generator) shrink() {
 				}, false)
 			}
 		}
-
+		if change != g.change {
+			continue
+		}
+		// entire buffer minimization
+		minimize(g.lastBuf.buf, g.tryShrink, true)
 	}
 }
 
