@@ -123,7 +123,24 @@ func encodefloat64(f float64) [10]byte {
 	// TODO: handle subnormals so that they're more complex
 	sexp := int16((bits >> 52) & 0x7ff)
 	var exp uint16
-	if sexp != 0 {
+	if sexp == 0 {
+		if mant != 0 {
+			// subnormal number, use the extra range we get from
+			// int16 to signal this
+			sexp = 1024
+			exp = uint16(sexp)
+			exp ^= (1 << 15)
+		}
+	} else if exp == 0x7ff {
+		// infinity and NaN, they're more complex that negative
+		// exponent and subnormals
+		sexp = 1025
+		exp = uint16(sexp)
+		exp ^= (1 << 15)
+
+	} else {
+		// regular exponent
+		// unbias
 		sexp -= 1023
 		// if exponent is positive, bias it +1
 		// so that an exponent of 1 becomes 0
@@ -154,22 +171,6 @@ func decodefloat64(b []byte) (float64, bool) {
 		return 0, true
 	}
 	fbits = uint64(sign) << 63
-	exp := binary.BigEndian.Uint16(b[8:])
-	if exp&(1<<15) != 0 {
-		// this is a signed exponent
-		// clear the sign bit
-		sexp := int16(exp & (^uint16(0) >> 1))
-		// make into negative number
-		sexp *= -1
-		// unbias
-		sexp += 1023
-		exp = uint16(sexp)
-	} else if exp != 0 {
-		// positive exponent
-		exp -= 1
-		exp += 1023
-	}
-	fbits ^= uint64(exp) << 52
 	// mantissa only take 7 bytes in our binary packing
 	// but binary only lets us read in chunks of 8
 	// copy the mantissa value into an empty array
@@ -177,7 +178,33 @@ func decodefloat64(b []byte) (float64, bool) {
 	var mb [8]byte
 	copy(mb[:], b[1:8])
 	mant := binary.LittleEndian.Uint64(mb[:])
+
+	exp := binary.BigEndian.Uint16(b[8:])
+	if exp&(1<<15) != 0 {
+		// this is a signed exponent
+		// clear the sign bit
+		sexp := int16(exp & (^uint16(0) >> 1))
+		if sexp == 1024 {
+			exp = 0
+		} else if sexp == 1025 {
+			exp = 0x7ff
+		} else {
+			// this is a regular negative exponent
+			// make into negative number
+			sexp *= -1
+			// bias
+			sexp += 1023
+			exp = uint16(sexp)
+		}
+	} else if exp != 0 {
+		// positive exponent
+		exp -= 1
+		exp += 1023
+	} else if mant != 0 {
+		mant = 0
+	}
 	fbits ^= mant & (^uint64(0) >> (64 - 52))
+	fbits ^= uint64(exp) << 52
 	return math.Float64frombits(fbits), false
 }
 
@@ -190,7 +217,7 @@ func (g *Generator) Uint64() uint64 {
 
 func (g *Generator) Int16() int16 {
 	g.StartExample()
-	f := g.Draw(8, Uniform)
+	f := g.Draw(2, Uniform)
 	g.EndExample()
 	return int16(binary.BigEndian.Uint16(f))
 }
