@@ -265,6 +265,7 @@ func (g *Generator) tryShrink(byt []byte) bool {
 func (g *Generator) Fatalf(format string, i ...interface{}) {
 	// TODO: make this hook into the shrinking and gofuzz
 	fmt.Printf(format, i...)
+	fmt.Println()
 	panic(new(failed))
 }
 

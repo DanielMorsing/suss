@@ -22,7 +22,6 @@ func TestSort(t *testing.T) {
 			}
 		}
 	})
-
 }
 
 func sortFloats(f []float64) {
