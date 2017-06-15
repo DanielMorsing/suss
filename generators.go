@@ -127,17 +127,12 @@ func encodefloat64(f float64) [10]byte {
 		if mant != 0 {
 			// subnormal number, use the extra range we get from
 			// int16 to signal this
-			sexp = 1024
-			exp = uint16(sexp)
-			exp ^= (1 << 15)
+			exp = sint16tolex16(-1024)
 		}
-	} else if exp == 0x7ff {
+	} else if sexp == 0x7ff {
 		// infinity and NaN, they're more complex that negative
 		// exponent and subnormals
-		sexp = 1025
-		exp = uint16(sexp)
-		exp ^= (1 << 15)
-
+		exp = sint16tolex16(-1025)
 	} else {
 		// regular exponent
 		// unbias
@@ -155,13 +150,18 @@ func encodefloat64(f float64) [10]byte {
 			// when interpreted as a byte stream
 			// the sign keeps the invariant that
 			// integers are simpler than fractionals
-			sexp *= -1
-			exp = uint16(sexp)
-			exp ^= (1 << 15)
+			exp = sint16tolex16(sexp)
 		}
 	}
 	binary.BigEndian.PutUint16(b[8:], exp)
 	return b
+}
+
+func sint16tolex16(s int16) uint16 {
+	s *= -1
+	exp := uint16(s)
+	exp ^= (1 << 15)
+	return exp
 }
 
 func decodefloat64(b []byte) (float64, bool) {
