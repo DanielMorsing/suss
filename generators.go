@@ -120,9 +120,7 @@ func encodefloat64(f float64) [10]byte {
 
 	// if the exponent is 0, that means this value
 	// is a zero. don't unbias the exponent in this case
-	// While we should be able to just fill the rest of the buffer with
-	// zeros, we might have got a weird encoding of 0 that could cause
-	// a fault
+	// TODO: handle subnormals so that they're more complex
 	sexp := int16((bits >> 52) & 0x7ff)
 	var exp uint16
 	if sexp != 0 {
