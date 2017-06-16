@@ -70,6 +70,9 @@ func (g *Generator) Run(f func()) {
 	}
 	// if we got here, that means that we have an interesting buffer
 	// That usually means a failing test, now try shrinking it
+	if g.buf.status != statusInteresting {
+		return
+	}
 	g.lastBuf.finalize()
 	g.shrink()
 	g.t.FailNow()

@@ -46,14 +46,18 @@ func (t *bufTree) add(b *buffer) {
 			if len(t.nodes[idx].edges) < 256 {
 				break
 			}
+			alldead := true
 			for _, v := range t.nodes[idx].edges {
-				if t.dead[v] {
-					t.dead[idx] = true
+				if !t.dead[v] {
+					alldead = false
+					break
 				}
 			}
-			if !t.dead[idx] {
-				return
+			if alldead {
+				t.dead[idx] = true
+				continue
 			}
+			return
 		}
 	}
 }
