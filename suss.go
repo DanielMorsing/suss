@@ -196,6 +196,20 @@ func (g *Generator) shrink() {
 		}
 		// entire buffer minimization
 		minimize(g.lastBuf.buf, g.tryShrink, true)
+
+		// shrinking of individual blocks
+		i = 0
+		for i < len(g.lastBuf.blocks) {
+			block := g.lastBuf.blocks[i]
+			u, v := block[0], block[1]
+			buf := append([]byte(nil), g.lastBuf.buf[u:v]...)
+			minimize(buf, func(b []byte) bool {
+				byt := append([]byte(nil), g.lastBuf.buf...)
+				copy(byt[u:v], b)
+				return g.tryShrink(byt)
+			}, false)
+			i++
+		}
 	}
 }
 
