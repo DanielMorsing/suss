@@ -117,6 +117,11 @@ func (g *Generator) shrink() {
 			}
 			k /= 2
 		}
+		g.zeroBlocks()
+
+		// entire buffer minimization
+		minimize(g.lastBuf.buf, g.tryShrink, true)
+
 		if change != g.change {
 			continue
 		}
@@ -168,6 +173,7 @@ func (g *Generator) shrink() {
 			}
 			i++
 		}
+		// shrinking of duplicated blocks
 		blockChanged := -1
 		for blockChanged != g.change {
 			blockChanged = g.change
@@ -194,9 +200,6 @@ func (g *Generator) shrink() {
 		if change != g.change {
 			continue
 		}
-		// entire buffer minimization
-		minimize(g.lastBuf.buf, g.tryShrink, true)
-
 		// shrinking of individual blocks
 		i = 0
 		for i < len(g.lastBuf.blocks) {
@@ -277,6 +280,48 @@ func (g *Generator) tryShrink(byt []byte) bool {
 		return true
 	}
 	return false
+}
+
+func (g *Generator) zeroBlocks() {
+	lo := 0
+	numBlocks := len(g.lastBuf.blocks)
+	hi := numBlocks
+	for lo < hi {
+		mid := lo + (hi-lo)/2
+		byt := append([]byte(nil), g.lastBuf.buf...)
+		u := g.lastBuf.blocks[mid][0]
+		for i := u; i < len(byt); i++ {
+			byt[i] = 0
+		}
+		if g.tryShrink(byt) {
+			// TODO: figure out if this is right
+			// if we changed the number of blocks drawn
+			// then we could potentially run into out-of-bounds
+			// and linear time probing
+			if len(g.lastBuf.blocks) != numBlocks {
+				break
+			}
+			hi = mid
+		} else {
+			lo = mid + 1
+		}
+	}
+
+	for i := len(g.lastBuf.blocks) - 1; i >= 0; i-- {
+		// shrinking might change number of blocks in the
+		// last buffer
+		if i >= len(g.lastBuf.blocks) {
+			i = len(g.lastBuf.blocks)
+			continue
+		}
+		byt := append([]byte(nil), g.lastBuf.buf...)
+		block := g.lastBuf.blocks[i]
+		u, v := block[0], block[1]
+		for i := u; i < v; i++ {
+			byt[i] = 0
+		}
+		g.tryShrink(byt)
+	}
 }
 
 func (g *Generator) Fatalf(format string, i ...interface{}) {
