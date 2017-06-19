@@ -11,15 +11,15 @@ type SliceGen struct {
 	Min int
 	Max int
 
-	g *Generator
+	r *Runner
 }
 
-func (g *Generator) Slice() *SliceGen {
+func (r *Runner) Slice() *SliceGen {
 	return &SliceGen{
 		Avg: 50,
 		Min: 0,
 		Max: int(^uint(0) >> 1),
-		g:   g,
+		r:   r,
 	}
 }
 
@@ -42,26 +42,26 @@ func (s *SliceGen) Gen(f func()) {
 	min := uint64(s.Min)
 	max := uint64(s.Max)
 	for l < max {
-		s.g.StartExample()
-		more := s.g.biasBool(stopvalue)
+		s.r.StartExample()
+		more := s.r.biasBool(stopvalue)
 		if !more && l >= min {
-			s.g.EndExample()
+			s.r.EndExample()
 			return
 		}
 		l++
 		f()
-		s.g.EndExample()
+		s.r.EndExample()
 	}
 }
 
-func (g *Generator) Bool() bool {
-	b := g.Draw(1, Uniform)
+func (r *Runner) Bool() bool {
+	b := r.Draw(1, Uniform)
 	return b[0]&1 == 1
 }
 
-func (g *Generator) Float64() float64 {
-	g.StartExample()
-	fbits := g.Draw(10, func(r *rand.Rand, n int) []byte {
+func (r *Runner) Float64() float64 {
+	r.StartExample()
+	fbits := r.Draw(10, func(r *rand.Rand, n int) []byte {
 		if n != 10 {
 			panic("bad float size")
 		}
@@ -87,10 +87,10 @@ func (g *Generator) Float64() float64 {
 		b := encodefloat64(f)
 		return b[:]
 	})
-	g.EndExample()
+	r.EndExample()
 	f, invalid := decodefloat64(fbits)
 	if invalid {
-		g.Invalid()
+		r.Invalid()
 	}
 	return f
 }
@@ -208,28 +208,28 @@ func decodefloat64(b []byte) (float64, bool) {
 	return math.Float64frombits(fbits), false
 }
 
-func (g *Generator) Uint64() uint64 {
-	g.StartExample()
-	f := g.Draw(8, Uniform)
-	g.EndExample()
+func (r *Runner) Uint64() uint64 {
+	r.StartExample()
+	f := r.Draw(8, Uniform)
+	r.EndExample()
 	return binary.BigEndian.Uint64(f)
 }
 
-func (g *Generator) Int16() int16 {
-	g.StartExample()
-	f := g.Draw(2, Uniform)
-	g.EndExample()
+func (r *Runner) Int16() int16 {
+	r.StartExample()
+	f := r.Draw(2, Uniform)
+	r.EndExample()
 	return int16(binary.BigEndian.Uint16(f))
 }
 
-func (g *Generator) Byte() byte {
-	g.StartExample()
-	defer g.EndExample()
-	return g.Draw(1, Uniform)[0]
+func (r *Runner) Byte() byte {
+	r.StartExample()
+	defer r.EndExample()
+	return r.Draw(1, Uniform)[0]
 }
 
-func (g *Generator) biasBool(f float64) bool {
-	bits := g.Draw(1, func(r *rand.Rand, n int) []byte {
+func (r *Runner) biasBool(f float64) bool {
+	bits := r.Draw(1, func(r *rand.Rand, n int) []byte {
 		roll := r.Float64()
 		b := byte(0)
 		if roll < f {

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-type Generator struct {
+type Runner struct {
 	rnd     *rand.Rand
 	seeder  *rand.Rand
 	t       *testing.T
@@ -23,62 +23,62 @@ type Generator struct {
 	change int
 }
 
-func NewTest(t *testing.T) *Generator {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
-	g := &Generator{
+func NewTest(t *testing.T) *Runner {
+	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	r := &Runner{
 		t:       t,
-		seeder:  r,
+		seeder:  rnd,
 		lastBuf: &buffer{},
 		tree:    newBufTree(),
 	}
-	return g
+	return r
 }
 
-func (g *Generator) newData() {
-	g.rnd = rand.New(rand.NewSource(int64(g.seeder.Uint64())))
-	g.buf = newBuffer(maxsize, g.regularDraw)
+func (r *Runner) newData() {
+	r.rnd = rand.New(rand.NewSource(int64(r.seeder.Uint64())))
+	r.buf = newBuffer(maxsize, r.regularDraw)
 }
 
 const maxsize = 8 << 10
 
-func (g *Generator) Run(f func()) {
-	g.startTime = time.Now()
-	g.testfunc = f
-	g.newData()
+func (r *Runner) Run(f func()) {
+	r.startTime = time.Now()
+	r.testfunc = f
+	r.newData()
 	mutations := 0
-	for !g.tree.dead[0] {
-		g.runOnce()
-		g.tree.add(g.buf)
-		if g.buf.status == statusInteresting {
-			g.lastBuf = g.buf
+	for !r.tree.dead[0] {
+		r.runOnce()
+		r.tree.add(r.buf)
+		if r.buf.status == statusInteresting {
+			r.lastBuf = r.buf
 			break
 		}
-		if time.Since(g.startTime) > 1*time.Second {
+		if time.Since(r.startTime) > 1*time.Second {
 			return
 		}
 		if mutations >= 10 {
-			g.newData()
+			r.newData()
 			mutations = 0
 			continue
 		}
 		mutations++
-		if g.considerNewBuffer(g.buf) {
-			g.lastBuf = g.buf
+		if r.considerNewBuffer(r.buf) {
+			r.lastBuf = r.buf
 		}
-		mut := g.newMutator()
-		g.buf = newBuffer(maxsize, mut)
+		mut := r.newMutator()
+		r.buf = newBuffer(maxsize, mut)
 	}
-	// if we got here, that means that we have an interesting buffer
+	// if we got here, that means that we have an interestinr.buffer
 	// That usually means a failing test, now try shrinking it
-	if g.buf.status != statusInteresting {
+	if r.buf.status != statusInteresting {
 		return
 	}
-	g.lastBuf.finalize()
-	g.shrink()
-	g.t.FailNow()
+	r.lastBuf.finalize()
+	r.shrink()
+	r.t.FailNow()
 }
 
-func (g *Generator) shrink() {
+func (r *Runner) shrink() {
 	defer func() {
 		r := recover()
 		if _, ok := r.(*complete); ok {
@@ -87,87 +87,87 @@ func (g *Generator) shrink() {
 			panic(r)
 		}
 	}()
-	g.startTime = time.Now()
+	r.startTime = time.Now()
 	change := -1
-	for g.change > change {
-		change = g.change
+	for r.change > change {
+		change = r.change
 		// structured interval delete
-		k := len(g.lastBuf.sortedInter) / 2
+		k := len(r.lastBuf.sortedInter) / 2
 		for k > 0 {
 			i := 0
-			for i+k <= len(g.lastBuf.sortedInter) {
+			for i+k <= len(r.lastBuf.sortedInter) {
 				// if I were clever, i'd use some sort of tree
 				// for this
-				elide := make([]bool, len(g.lastBuf.buf))
-				for _, v := range g.lastBuf.sortedInter[i : i+k] {
+				elide := make([]bool, len(r.lastBuf.buf))
+				for _, v := range r.lastBuf.sortedInter[i : i+k] {
 					for t := v[0]; t < v[1]; t++ {
 						elide[t] = true
 					}
 				}
-				byt := make([]byte, 0, len(g.lastBuf.buf))
-				for i, v := range g.lastBuf.buf {
+				byt := make([]byte, 0, len(r.lastBuf.buf))
+				for i, v := range r.lastBuf.buf {
 					if elide[i] {
 						continue
 					}
 					byt = append(byt, v)
 				}
-				if !g.tryShrink(byt) {
+				if !r.tryShrink(byt) {
 					i += k
 				}
 			}
 			k /= 2
 		}
-		g.zeroBlocks()
+		r.zeroBlocks()
 
 		// entire buffer minimization
-		minimize(g.lastBuf.buf, g.tryShrink, true)
+		minimize(r.lastBuf.buf, r.tryShrink, true)
 
-		if change != g.change {
+		if change != r.change {
 			continue
 		}
 		// bulk replacing blocks with simpler blocks
 		i := 0
 		// can't use range here, lastbuf might change
-		for i < len(g.lastBuf.blocks) {
-			uv := g.lastBuf.blocks[i]
+		for i < len(r.lastBuf.blocks) {
+			uv := r.lastBuf.blocks[i]
 			u, v := uv[0], uv[1]
-			buf := g.lastBuf.buf
+			buf := r.lastBuf.buf
 			block := buf[u:v]
 			n := v - u
 
-			byt := make([]byte, len(g.lastBuf.buf))
-			for _, v := range g.lastBuf.blocks {
+			byt := make([]byte, len(r.lastBuf.buf))
+			for _, v := range r.lastBuf.blocks {
 				l := v[1] - v[0]
-				origblock := g.lastBuf.buf[v[0]:v[1]]
+				origblock := r.lastBuf.buf[v[0]:v[1]]
 				if l == n && (bytes.Compare(origblock, block) > 0) {
 					byt = append(byt, block...)
 				} else {
 					byt = append(byt, origblock...)
 				}
 			}
-			g.tryShrink(byt)
+			r.tryShrink(byt)
 			i++
 		}
 		// replace individual blocks with simpler blocks
 		i = 0
-		for i < len(g.lastBuf.blocks) {
-			uv := g.lastBuf.blocks[i]
+		for i < len(r.lastBuf.blocks) {
+			uv := r.lastBuf.blocks[i]
 			u, v := uv[0], uv[1]
-			buf := g.lastBuf.buf
+			buf := r.lastBuf.buf
 			block := buf[u:v]
 			n := v - u
-			otherblocks := g.lastBuf.blockStarts[n]
+			otherblocks := r.lastBuf.blockStarts[n]
 			// find all the blocks simpler than this
 			j := sort.Search(len(otherblocks), func(idx int) bool {
 				v := otherblocks[idx]
-				byt := g.lastBuf.buf[v : v+n]
+				byt := r.lastBuf.buf[v : v+n]
 				return bytes.Compare(byt, block) >= 0
 			})
 			otherblocks = otherblocks[:j]
 			for _, b := range otherblocks {
-				byt := append([]byte(nil), g.lastBuf.buf...)
-				copy(byt[u:v], g.lastBuf.buf[b:b+n])
-				if g.tryShrink(byt) {
+				byt := append([]byte(nil), r.lastBuf.buf...)
+				copy(byt[u:v], r.lastBuf.buf[b:b+n])
+				if r.tryShrink(byt) {
 					break
 				}
 			}
@@ -175,12 +175,12 @@ func (g *Generator) shrink() {
 		}
 		// shrinking of duplicated blocks
 		blockChanged := -1
-		for blockChanged != g.change {
-			blockChanged = g.change
+		for blockChanged != r.change {
+			blockChanged = r.change
 			blocks := make(map[string][][2]int)
-			buf := append([]byte(nil), g.lastBuf.buf...)
-			for _, v := range g.lastBuf.blocks {
-				s := string(g.lastBuf.buf[v[0]:v[1]])
+			buf := append([]byte(nil), r.lastBuf.buf...)
+			for _, v := range r.lastBuf.blocks {
+				s := string(r.lastBuf.buf[v[0]:v[1]])
 				blocks[s] = append(blocks[s], v)
 			}
 			for k, v := range blocks {
@@ -193,34 +193,34 @@ func (g *Generator) shrink() {
 					for _, v := range s {
 						copy(buf[v[0]:v[1]], b)
 					}
-					return g.tryShrink(buf)
+					return r.tryShrink(buf)
 				}, false)
 			}
 		}
-		if change != g.change {
+		if change != r.change {
 			continue
 		}
 		// shrinking of individual blocks
 		i = 0
-		for i < len(g.lastBuf.blocks) {
-			block := g.lastBuf.blocks[i]
+		for i < len(r.lastBuf.blocks) {
+			block := r.lastBuf.blocks[i]
 			u, v := block[0], block[1]
-			buf := append([]byte(nil), g.lastBuf.buf[u:v]...)
+			buf := append([]byte(nil), r.lastBuf.buf[u:v]...)
 			minimize(buf, func(b []byte) bool {
-				byt := append([]byte(nil), g.lastBuf.buf...)
+				byt := append([]byte(nil), r.lastBuf.buf...)
 				copy(byt[u:v], b)
-				return g.tryShrink(byt)
+				return r.tryShrink(byt)
 			}, false)
 			i++
 		}
 	}
 }
 
-func (g *Generator) runOnce() {
+func (r *Runner) runOnce() {
 	testfail := true
 	defer func() {
-		r := recover()
-		if r == nil {
+		rec := recover()
+		if rec == nil {
 			if testfail {
 				// we tell users to not use t.FailNow
 				// but if they do use it
@@ -229,38 +229,38 @@ func (g *Generator) runOnce() {
 			}
 			return
 		}
-		switch r.(type) {
+		switch rec.(type) {
 		case *eos:
-			g.buf.status = statusOverrun
+			r.buf.status = statusOverrun
 			return
 		case *failed:
-			g.buf.status = statusInteresting
+			r.buf.status = statusInteresting
 			return
 		case *invalid:
-			g.buf.status = statusInvalid
+			r.buf.status = statusInvalid
 			return
 		}
 		panic(r)
 	}()
-	g.testfunc()
-	g.buf.status = statusValid
+	r.testfunc()
+	r.buf.status = statusValid
 	testfail = false
 }
 
-func (g *Generator) tryShrink(byt []byte) bool {
+func (r *Runner) tryShrink(byt []byte) bool {
 	// TODO slice last_data
-	if g.lastBuf.status != statusInteresting {
+	if r.lastBuf.status != statusInteresting {
 		panic("whoa")
 	}
 
 	i := 0
 	noveledge := false
 	for _, b := range byt {
-		if g.tree.dead[i] {
+		if r.tree.dead[i] {
 			return false
 		}
 		var ok bool
-		i, ok = g.tree.nodes[i].edges[b]
+		i, ok = r.tree.nodes[i].edges[b]
 		if !ok {
 			noveledge = true
 			break
@@ -270,35 +270,35 @@ func (g *Generator) tryShrink(byt []byte) bool {
 		return false
 	}
 
-	g.buf = bufFromBytes(byt)
-	g.runOnce()
-	g.tree.add(g.buf)
-	g.buf.finalize()
-	if g.considerNewBuffer(g.buf) {
-		g.change += 1
-		g.lastBuf = g.buf
+	r.buf = bufFromBytes(byt)
+	r.runOnce()
+	r.tree.add(r.buf)
+	r.buf.finalize()
+	if r.considerNewBuffer(r.buf) {
+		r.change += 1
+		r.lastBuf = r.buf
 		return true
 	}
 	return false
 }
 
-func (g *Generator) zeroBlocks() {
+func (r *Runner) zeroBlocks() {
 	lo := 0
-	numBlocks := len(g.lastBuf.blocks)
+	numBlocks := len(r.lastBuf.blocks)
 	hi := numBlocks
 	for lo < hi {
 		mid := lo + (hi-lo)/2
-		byt := append([]byte(nil), g.lastBuf.buf...)
-		u := g.lastBuf.blocks[mid][0]
+		byt := append([]byte(nil), r.lastBuf.buf...)
+		u := r.lastBuf.blocks[mid][0]
 		for i := u; i < len(byt); i++ {
 			byt[i] = 0
 		}
-		if g.tryShrink(byt) {
+		if r.tryShrink(byt) {
 			// TODO: figure out if this is right
 			// if we changed the number of blocks drawn
 			// then we could potentially run into out-of-bounds
 			// and linear time probing
-			if len(g.lastBuf.blocks) != numBlocks {
+			if len(r.lastBuf.blocks) != numBlocks {
 				break
 			}
 			hi = mid
@@ -307,42 +307,42 @@ func (g *Generator) zeroBlocks() {
 		}
 	}
 
-	for i := len(g.lastBuf.blocks) - 1; i >= 0; i-- {
+	for i := len(r.lastBuf.blocks) - 1; i >= 0; i-- {
 		// shrinking might change number of blocks in the
 		// last buffer
-		if i >= len(g.lastBuf.blocks) {
-			i = len(g.lastBuf.blocks)
+		if i >= len(r.lastBuf.blocks) {
+			i = len(r.lastBuf.blocks)
 			continue
 		}
-		byt := append([]byte(nil), g.lastBuf.buf...)
-		block := g.lastBuf.blocks[i]
+		byt := append([]byte(nil), r.lastBuf.buf...)
+		block := r.lastBuf.blocks[i]
 		u, v := block[0], block[1]
 		for i := u; i < v; i++ {
 			byt[i] = 0
 		}
-		g.tryShrink(byt)
+		r.tryShrink(byt)
 	}
 }
 
-func (g *Generator) Fatalf(format string, i ...interface{}) {
+func (r *Runner) Fatalf(format string, i ...interface{}) {
 	// TODO: make this hook into the shrinking and gofuzz
 	fmt.Printf(format, i...)
 	fmt.Println()
 	panic(new(failed))
 }
 
-func (g *Generator) Draw(n int, smp Sample) []byte {
-	b := g.buf.Draw(n, smp)
+func (r *Runner) Draw(n int, smp Sample) []byte {
+	b := r.buf.Draw(n, smp)
 	return b
 }
 
-func (g *Generator) Invalid() {
+func (r *Runner) Invalid() {
 	panic(new(invalid))
 }
 
-func (g *Generator) regularDraw(b *buffer, n int, smp Sample) []byte {
-	res := smp(g.rnd, n)
-	return g.rewriteNovelty(b, res)
+func (r *Runner) regularDraw(b *buffer, n int, smp Sample) []byte {
+	res := smp(r.rnd, n)
+	return r.rewriteNovelty(b, res)
 }
 
 type Sample func(r *rand.Rand, n int) []byte
@@ -355,7 +355,7 @@ func Uniform(r *rand.Rand, n int) []byte {
 
 // in case that we happen across a prefix or extension of a buffer
 // we generated before, rewrite it with something we haven't seen before
-func (g *Generator) rewriteNovelty(b *buffer, result []byte) []byte {
+func (r *Runner) rewriteNovelty(b *buffer, result []byte) []byte {
 	idx := b.nodeIndex
 	if idx == -1 {
 		if len(b.buf) != 0 {
@@ -372,10 +372,10 @@ func (g *Generator) rewriteNovelty(b *buffer, result []byte) []byte {
 	// any opportunity for us to become a dead node
 	// goes through previous nodes and we should have
 	// rewritten that.
-	if g.tree.dead[idx] {
+	if r.tree.dead[idx] {
 		panic("dead node")
 	}
-	n := g.tree.nodes[idx]
+	n := r.tree.nodes[idx]
 	// walk the tree, looking for places where we
 	// would become dead and inserting new values there
 	for i, v := range result {
@@ -384,8 +384,8 @@ func (g *Generator) rewriteNovelty(b *buffer, result []byte) []byte {
 			b.hitNovelty = true
 			return result
 		}
-		nextn := g.tree.nodes[next]
-		if g.tree.dead[next] {
+		nextn := r.tree.nodes[next]
+		if r.tree.dead[next] {
 			for c := 0; c < 256; c++ {
 				if _, ok := n.edges[byte(c)]; !ok {
 					result[i] = byte(c)
@@ -393,8 +393,8 @@ func (g *Generator) rewriteNovelty(b *buffer, result []byte) []byte {
 					return result
 				}
 				next = n.edges[byte(c)]
-				nextn = g.tree.nodes[next]
-				if !g.tree.dead[next] {
+				nextn = r.tree.nodes[next]
+				if !r.tree.dead[next] {
 					result[i] = byte(c)
 					break
 				}
@@ -407,20 +407,20 @@ func (g *Generator) rewriteNovelty(b *buffer, result []byte) []byte {
 	return result
 }
 
-func (g *Generator) newMutator() drawFunc {
+func (r *Runner) newMutator() drawFunc {
 	mutateLibrary := []drawFunc{
-		g.drawNew,
-		g.drawExisting,
-		g.drawLarger,
-		g.drawSmaller,
-		g.drawZero,
-		g.drawConstant,
-		g.flipBit,
+		r.drawNew,
+		r.drawExisting,
+		r.drawLarger,
+		r.drawSmaller,
+		r.drawZero,
+		r.drawConstant,
+		r.flipBit,
 	}
 	// choose 3 mutation functions and choose randomly
 	// between them on each draw
 	// This is the mutation scheme used by conjecture
-	perm := g.rnd.Perm(len(mutateLibrary))
+	perm := r.rnd.Perm(len(mutateLibrary))
 	mutateDraws := make([]drawFunc, 3)
 	for i := 0; i < 3; i++ {
 		mutateDraws[i] = mutateLibrary[perm[i]]
@@ -428,52 +428,52 @@ func (g *Generator) newMutator() drawFunc {
 
 	return func(b *buffer, n int, smp Sample) []byte {
 		var res []byte
-		if b.index+n > len(g.lastBuf.buf) {
-			res = smp(g.rnd, n)
+		if b.index+n > len(r.lastBuf.buf) {
+			res = smp(r.rnd, n)
 		} else {
-			d := g.seeder.Intn(len(mutateDraws))
+			d := r.seeder.Intn(len(mutateDraws))
 			res = mutateDraws[d](b, n, smp)
 		}
-		return g.rewriteNovelty(b, res)
+		return r.rewriteNovelty(b, res)
 	}
 
 }
 
-func (g *Generator) drawLarger(b *buffer, n int, smp Sample) []byte {
-	exist := g.lastBuf.buf[b.index : b.index+n]
-	r := smp(g.rnd, n)
-	if bytes.Compare(r, exist) >= 0 {
-		return r
+func (r *Runner) drawLarger(b *buffer, n int, smp Sample) []byte {
+	exist := r.lastBuf.buf[b.index : b.index+n]
+	sample := smp(r.rnd, n)
+	if bytes.Compare(sample, exist) >= 0 {
+		return sample
 	}
-	return g.larger(exist)
+	return r.larger(exist)
 }
 
-func (g *Generator) drawSmaller(b *buffer, n int, smp Sample) []byte {
-	exist := g.lastBuf.buf[b.index : b.index+n]
-	r := smp(g.rnd, n)
-	if bytes.Compare(r, exist) <= 0 {
-		return r
+func (r *Runner) drawSmaller(b *buffer, n int, smp Sample) []byte {
+	exist := r.lastBuf.buf[b.index : b.index+n]
+	sample := smp(r.rnd, n)
+	if bytes.Compare(sample, exist) <= 0 {
+		return sample
 	}
-	return g.smaller(exist)
+	return r.smaller(exist)
 }
 
-func (g *Generator) drawNew(b *buffer, n int, smp Sample) []byte {
-	return smp(g.rnd, n)
+func (r *Runner) drawNew(b *buffer, n int, smp Sample) []byte {
+	return smp(r.rnd, n)
 }
 
-func (g *Generator) drawExisting(b *buffer, n int, smp Sample) []byte {
+func (r *Runner) drawExisting(b *buffer, n int, smp Sample) []byte {
 	ret := make([]byte, n)
-	copy(ret, g.lastBuf.buf[b.index:b.index+n])
+	copy(ret, r.lastBuf.buf[b.index:b.index+n])
 	return ret
 
 }
 
-func (g *Generator) drawZero(b *buffer, n int, smp Sample) []byte {
+func (r *Runner) drawZero(b *buffer, n int, smp Sample) []byte {
 	return make([]byte, n)
 }
 
-func (g *Generator) drawConstant(b *buffer, n int, smp Sample) []byte {
-	v := byte(g.rnd.Intn(256))
+func (r *Runner) drawConstant(b *buffer, n int, smp Sample) []byte {
+	v := byte(r.rnd.Intn(256))
 	byt := make([]byte, n)
 	for i := 0; i < len(byt); i++ {
 		byt[i] = v
@@ -481,69 +481,69 @@ func (g *Generator) drawConstant(b *buffer, n int, smp Sample) []byte {
 	return byt
 }
 
-func (g *Generator) flipBit(b *buffer, n int, smp Sample) []byte {
+func (r *Runner) flipBit(b *buffer, n int, smp Sample) []byte {
 	byt := make([]byte, n)
-	copy(byt, g.lastBuf.buf[b.index:b.index+n])
-	i := g.rnd.Intn(n)
-	k := g.rnd.Intn(8)
+	copy(byt, r.lastBuf.buf[b.index:b.index+n])
+	i := r.rnd.Intn(n)
+	k := r.rnd.Intn(8)
 	byt[i] ^= 1 << byte(k)
 	return byt
 }
 
-func (g *Generator) larger(b []byte) []byte {
-	r := make([]byte, len(b))
+func (r *Runner) larger(b []byte) []byte {
+	rnd := make([]byte, len(b))
 	drewlarger := false
 	for i := 0; i < len(b); i++ {
 		if !drewlarger {
 			v := 256 - int(b[i])
-			r[i] = b[i] + byte(g.rnd.Intn(v))
-			if r[i] > b[i] {
+			rnd[i] = b[i] + byte(r.rnd.Intn(v))
+			if rnd[i] > b[i] {
 				drewlarger = true
 			}
 		} else {
-			r[i] = byte(g.rnd.Intn(256))
+			rnd[i] = byte(r.rnd.Intn(256))
 		}
 	}
-	return r
+	return rnd
 }
 
-func (g *Generator) smaller(b []byte) []byte {
-	r := make([]byte, len(b))
+func (r *Runner) smaller(b []byte) []byte {
+	rnd := make([]byte, len(b))
 	drewsmaller := false
 	for i := 0; i < len(b); i++ {
 		if !drewsmaller {
-			r[i] = byte(g.rnd.Intn(int(b[i]) + 1))
-			if r[i] < b[i] {
+			rnd[i] = byte(r.rnd.Intn(int(b[i]) + 1))
+			if rnd[i] < b[i] {
 				drewsmaller = true
 			}
 		} else {
-			r[i] = byte(g.rnd.Intn(256))
+			rnd[i] = byte(r.rnd.Intn(256))
 		}
 	}
-	return r
+	return rnd
 
 }
 
-func (g *Generator) StartExample() {
-	g.buf.StartExample()
+func (r *Runner) StartExample() {
+	r.buf.StartExample()
 }
 
-func (g *Generator) EndExample() {
-	g.buf.EndExample()
+func (r *Runner) EndExample() {
+	r.buf.EndExample()
 }
 
-func (g *Generator) considerNewBuffer(b *buffer) bool {
-	if bytes.Compare(g.lastBuf.buf, b.buf) == 0 {
+func (r *Runner) considerNewBuffer(b *buffer) bool {
+	if bytes.Compare(r.lastBuf.buf, b.buf) == 0 {
 		return false
 	}
-	if g.lastBuf.status != b.status {
-		return b.status > g.lastBuf.status
+	if r.lastBuf.status != b.status {
+		return b.status > r.lastBuf.status
 	}
 	if b.status == statusInvalid {
-		return b.index >= g.lastBuf.index
+		return b.index >= r.lastBuf.index
 	}
 	if b.status == statusOverrun {
-		return b.overdraw < g.lastBuf.overdraw
+		return b.overdraw < r.lastBuf.overdraw
 	}
 	if b.status == statusInteresting {
 		// TODO add assertions here

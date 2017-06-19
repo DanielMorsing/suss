@@ -35,7 +35,7 @@ func TestEncFloat64(t *testing.T) {
 	})
 }
 
-func drawExponent(s *Generator) uint16 {
+func drawExponent(s *Runner) uint16 {
 	bits := s.Draw(2, func(r *rand.Rand, n int) []byte {
 		var exp uint16
 		switch r.Intn(3) {
