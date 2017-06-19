@@ -11,10 +11,11 @@ func TestSort(t *testing.T) {
 	s := suss.NewTest(t)
 	s.Run(func() {
 		var f []float64
-		s.Slice().Gen(func() {
+		sg := suss.Slice(func() {
 			n := s.Float64()
 			f = append(f, n)
 		})
+		s.Draw(sg)
 		sortFloats(f)
 		for i := 0; i < len(f)-1; i++ {
 			if f[i] > f[i+1] {

@@ -11,19 +11,29 @@ type SliceGen struct {
 	Min int
 	Max int
 
-	r *Runner
+	f func()
 }
 
-func (r *Runner) Slice() *SliceGen {
+type Generator interface {
+	Fill(d Data)
+}
+
+type Data interface {
+	Draw(n int, smp Sample) []byte
+	StartExample()
+	EndExample()
+}
+
+func Slice(f func()) *SliceGen {
 	return &SliceGen{
 		Avg: 50,
 		Min: 0,
 		Max: int(^uint(0) >> 1),
-		r:   r,
+		f:   f,
 	}
 }
 
-func (s *SliceGen) Gen(f func()) {
+func (s *SliceGen) Fill(d Data) {
 	// The intuitive way to turn an infinite bytestream into a
 	// slice would be to grab a value at the beginning
 	// and then generate that number of elements
@@ -42,26 +52,41 @@ func (s *SliceGen) Gen(f func()) {
 	min := uint64(s.Min)
 	max := uint64(s.Max)
 	for l < max {
-		s.r.StartExample()
-		more := s.r.biasBool(stopvalue)
+		d.StartExample()
+		more := biasBool(d, stopvalue)
 		if !more && l >= min {
-			s.r.EndExample()
+			d.EndExample()
 			return
 		}
 		l++
-		f()
-		s.r.EndExample()
+		s.f()
+		d.EndExample()
 	}
 }
 
+type BoolGen bool
+
+func (b *BoolGen) Fill(d Data) {
+	byt := d.Draw(1, Uniform)
+	*b = byt[0]&1 == 1
+}
+
 func (r *Runner) Bool() bool {
-	b := r.Draw(1, Uniform)
-	return b[0]&1 == 1
+	var bgen BoolGen
+	r.Draw(&bgen)
+	return bool(bgen)
 }
 
 func (r *Runner) Float64() float64 {
-	r.StartExample()
-	fbits := r.Draw(10, func(r *rand.Rand, n int) []byte {
+	var f Float64Gen
+	r.Draw(&f)
+	return float64(f)
+}
+
+type Float64Gen float64
+
+func (f *Float64Gen) Fill(d Data) {
+	fbits := d.Draw(10, func(r *rand.Rand, n int) []byte {
 		if n != 10 {
 			panic("bad float size")
 		}
@@ -87,12 +112,11 @@ func (r *Runner) Float64() float64 {
 		b := encodefloat64(f)
 		return b[:]
 	})
-	r.EndExample()
-	f, invalid := decodefloat64(fbits)
+	fl, invalid := decodefloat64(fbits)
 	if invalid {
-		r.Invalid()
+		Invalid()
 	}
-	return f
+	*f = Float64Gen(fl)
 }
 
 // encodefloat64 attempts to encode a floating point number
@@ -208,28 +232,46 @@ func decodefloat64(b []byte) (float64, bool) {
 	return math.Float64frombits(fbits), false
 }
 
+type Uint64Gen uint64
+
+func (u *Uint64Gen) Fill(d Data) {
+	b := d.Draw(8, Uniform)
+	*u = Uint64Gen(binary.BigEndian.Uint64(b))
+}
+
 func (r *Runner) Uint64() uint64 {
-	r.StartExample()
-	f := r.Draw(8, Uniform)
-	r.EndExample()
-	return binary.BigEndian.Uint64(f)
+	var u Uint64Gen
+	r.Draw(&u)
+	return uint64(u)
+}
+
+type Int16Gen int16
+
+func (i *Int16Gen) Fill(d Data) {
+	f := d.Draw(2, Uniform)
+	*i = Int16Gen(binary.BigEndian.Uint16(f))
 }
 
 func (r *Runner) Int16() int16 {
-	r.StartExample()
-	f := r.Draw(2, Uniform)
-	r.EndExample()
-	return int16(binary.BigEndian.Uint16(f))
+	var i Int16Gen
+	r.Draw(&i)
+	return int16(i)
+}
+
+type ByteGen byte
+
+func (b *ByteGen) Fill(d Data) {
+	*b = ByteGen(d.Draw(1, Uniform)[0])
 }
 
 func (r *Runner) Byte() byte {
-	r.StartExample()
-	defer r.EndExample()
-	return r.Draw(1, Uniform)[0]
+	var b ByteGen
+	r.Draw(&b)
+	return byte(b)
 }
 
-func (r *Runner) biasBool(f float64) bool {
-	bits := r.Draw(1, func(r *rand.Rand, n int) []byte {
+func biasBool(d Data, f float64) bool {
+	bits := d.Draw(1, func(r *rand.Rand, n int) []byte {
 		roll := r.Float64()
 		b := byte(0)
 		if roll < f {

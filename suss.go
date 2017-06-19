@@ -331,12 +331,13 @@ func (r *Runner) Fatalf(format string, i ...interface{}) {
 	panic(new(failed))
 }
 
-func (r *Runner) Draw(n int, smp Sample) []byte {
-	b := r.buf.Draw(n, smp)
-	return b
+func (r *Runner) Draw(g Generator) {
+	r.buf.StartExample()
+	g.Fill(r.buf)
+	r.buf.EndExample()
 }
 
-func (r *Runner) Invalid() {
+func Invalid() {
 	panic(new(invalid))
 }
 
@@ -522,14 +523,6 @@ func (r *Runner) smaller(b []byte) []byte {
 	}
 	return rnd
 
-}
-
-func (r *Runner) StartExample() {
-	r.buf.StartExample()
-}
-
-func (r *Runner) EndExample() {
-	r.buf.EndExample()
 }
 
 func (r *Runner) considerNewBuffer(b *buffer) bool {
