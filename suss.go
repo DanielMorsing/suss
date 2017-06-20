@@ -79,14 +79,6 @@ func (r *Runner) Run(f func()) {
 }
 
 func (r *Runner) shrink() {
-	defer func() {
-		r := recover()
-		if _, ok := r.(*complete); ok {
-			return
-		} else if r != nil {
-			panic(r)
-		}
-	}()
 	r.startTime = time.Now()
 	change := -1
 	for r.change > change {
@@ -549,5 +541,3 @@ type eos struct{}
 type failed struct{}
 
 type invalid struct{}
-
-type complete struct{}
