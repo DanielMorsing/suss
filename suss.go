@@ -205,7 +205,57 @@ func (r *Runner) shrink() {
 			}, false)
 			i++
 		}
+		if change != r.change {
+			continue
+		}
+		// reordering blocks
+		blockLengths := make([]int, 0, len(r.lastBuf.blockStarts))
+		for k := range r.lastBuf.blockStarts {
+			blockLengths = append(blockLengths, k)
+		}
+		// Sort in descending order
+		sort.Slice(blockLengths, func(i, j int) bool {
+			return blockLengths[i] > blockLengths[j]
+		})
+		for _, n := range blockLengths {
+			i := 1
+			starts := startsByLoc(r.lastBuf, n)
+			for i < len(starts) {
+				j := i
+				for j > 0 {
+					as := starts[j-1]
+					bs := starts[i]
+					// Use lastbuf for reading and write
+					// into byt
+					a := r.lastBuf.buf[as : as+n]
+					b := r.lastBuf.buf[bs : bs+n]
+					if bytes.Compare(a, b) <= 0 {
+						break
+					}
+					byt := append([]byte(nil), r.lastBuf.buf...)
+					copy(byt[as:], b)
+					copy(byt[bs:], a)
+					if r.tryShrink(byt) {
+						starts = startsByLoc(r.lastBuf, n)
+						j -= 1
+					} else {
+						break
+					}
+				}
+				i += 1
+			}
+		}
 	}
+}
+
+func startsByLoc(b *buffer, length int) []int {
+	// finalization of buffer sorts by simplicity of
+	// block, we want by start here
+	starts := append([]int(nil), b.blockStarts[length]...)
+	sort.Slice(starts, func(i, j int) bool {
+		return starts[i] < starts[j]
+	})
+	return starts
 }
 
 func (r *Runner) runOnce() {
