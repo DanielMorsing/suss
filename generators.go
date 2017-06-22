@@ -14,16 +14,66 @@ type SliceGen struct {
 	f func()
 }
 
+// Generator generates
+// data to be used in a test.
+// Fill should draw bytes from the Data interface
+// and change its own value based off those bytes.
+//
+// Generators can be passed to the Runner.Draw function
+// to be supplied with a Data to draw bytes from.
+// This is the main way to get varying data that might
+// cause tests to fail.
 type Generator interface {
 	Fill(d Data)
 }
 
+// Data is an interface passed to Fill methods on types implementing
+// the Generator interface. It is the main method for getting random
+// data from the Suspicion runner.
 type Data interface {
+	// Draw is the main way to get random data
+	// for a Suspicion test. It takes a number of bytes
+	// to draw and a Sample function. The Sample function
+	// should return a valid byte sequence for the value.
+	//
+	// Since return values from Sample is used as examples
+	// during execution, it is adventageous to return
+	// interesting values. Floating point Not-a-Number
+	// and Infinity values is a good example of such a
+	// value.
+	//
+	// During test execution, Draw might return the value
+	// from Sample or a random one. Callers must handle
+	// any random byte sequence, either by reinterpreting it
+	// or calling Invalid.
 	Draw(n int, smp Sample) []byte
+
+	// StartExample and EndExample are used to specify boundaries for
+	// draws. The shrinking algorithm uses these boundaries to make
+	// decisions about how to shrink.
+	//
+	// Most users will not need to
+	// explicitly call these functions, since Draw inserts StartExample
+	// and EndExample calls around calls to Fill.
+	//
+	// Calls to these functions can be nested.
 	StartExample()
 	EndExample()
 }
 
+// Slice returns a generator for a slice value.
+// It will repeatedly call the given function
+// during fill. It is the functions responsibility
+// to build the slice wanted.
+//
+// An example of the proper use of
+// Slice:
+//
+//	var f []float64
+//	s := suss.Slice(func() {
+//		f = append(f, runner.Float64())
+//	})
+//	runner.Draw(s)
 func Slice(f func()) *SliceGen {
 	return &SliceGen{
 		Avg: 50,
@@ -64,6 +114,7 @@ func (s *SliceGen) Fill(d Data) {
 	}
 }
 
+// BoolGen implements a generator for boolean values.
 type BoolGen bool
 
 func (b *BoolGen) Fill(d Data) {
@@ -71,18 +122,23 @@ func (b *BoolGen) Fill(d Data) {
 	*b = byt[0]&1 == 1
 }
 
+// Bool is a convenience function that returns
+// a boolean value from the Runner.
 func (r *Runner) Bool() bool {
 	var bgen BoolGen
 	r.Draw(&bgen)
 	return bool(bgen)
 }
 
+// Float64 is a convenience function that returns
+// a float64 value from the Runner.
 func (r *Runner) Float64() float64 {
 	var f Float64Gen
 	r.Draw(&f)
 	return float64(f)
 }
 
+// Float64Gen implements a generator for float64 values.
 type Float64Gen float64
 
 func (f *Float64Gen) Fill(d Data) {
@@ -232,6 +288,7 @@ func decodefloat64(b []byte) (float64, bool) {
 	return math.Float64frombits(fbits), false
 }
 
+// Uint64Gen implements a generator for uint64 values.
 type Uint64Gen uint64
 
 func (u *Uint64Gen) Fill(d Data) {
@@ -239,12 +296,15 @@ func (u *Uint64Gen) Fill(d Data) {
 	*u = Uint64Gen(binary.BigEndian.Uint64(b))
 }
 
+// Uint64 is a convenience function that returns
+// a uint64 value from the Runner.
 func (r *Runner) Uint64() uint64 {
 	var u Uint64Gen
 	r.Draw(&u)
 	return uint64(u)
 }
 
+// Int16Gen implements a generator for int16 values.
 type Int16Gen int16
 
 func (i *Int16Gen) Fill(d Data) {
@@ -252,18 +312,23 @@ func (i *Int16Gen) Fill(d Data) {
 	*i = Int16Gen(binary.BigEndian.Uint16(f))
 }
 
+// Int16 is a convenience function that returns
+// a int16 value from the Runner.
 func (r *Runner) Int16() int16 {
 	var i Int16Gen
 	r.Draw(&i)
 	return int16(i)
 }
 
+// ByteGen implements a generator for byte values.
 type ByteGen byte
 
 func (b *ByteGen) Fill(d Data) {
 	*b = ByteGen(d.Draw(1, Uniform)[0])
 }
 
+// Byte is a convenience function that returns
+// a byte value from the Runner.
 func (r *Runner) Byte() byte {
 	var b ByteGen
 	r.Draw(&b)

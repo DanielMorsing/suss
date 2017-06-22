@@ -1,3 +1,11 @@
+// Package suss (Full name Suspicion) is a property-based testing library
+//
+// Property-based testing uses random generation of data to find edge cases
+// that violate some property. Suspicion implements a state-of-the-art shrinker
+// to find minimal examples of these edge cases.
+//
+// Suspicion was heavily-inspired by the python project Hypothesis and its internal component, conjecture.
+// Users curious about internal workings can find more info at http://hypothesis.works/
 package suss
 
 import (
@@ -9,6 +17,7 @@ import (
 	"time"
 )
 
+// Runner is the main entry point to a Suspicion test.
 type Runner struct {
 	rnd     *rand.Rand
 	seeder  *rand.Rand
@@ -23,6 +32,7 @@ type Runner struct {
 	change int
 }
 
+// NewTest returns a Runner that runs a suspicion test.
 func NewTest(t *testing.T) *Runner {
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
 	r := &Runner{
@@ -41,6 +51,22 @@ func (r *Runner) newData() {
 
 const maxsize = 8 << 10
 
+// Run is the main entry point to a suspicion test.
+// To run a suspicion test, give it a function that verifies some
+// property and calls Runner.Fatalf if it's violated.
+// The function is executed multiple times with different
+// data to find a failing test.
+//
+// If data is found that causes the test to fail, then we
+// will attempt to "shrink" the data. Shrinking involves
+// making changes to the data, executing the test again
+// and seeing if the test still fails.
+//
+// The function given should be a self contained function that can
+// be called multiple times. This can be done by either making the
+// function side-effect free or making the function implement setup and
+// teardown logic. Since Suspicion uses panics as control flow,
+// teardown should be done using defers.
 func (r *Runner) Run(f func()) {
 	r.startTime = time.Now()
 	r.testfunc = f
@@ -245,6 +271,10 @@ func (r *Runner) shrink() {
 				i += 1
 			}
 		}
+		// TODO: implement suffix shuffling while
+		// minimizing prefixes. This requires bind_points
+		// to be implemented and given the strategies involved
+		// in hypothesis, I suspect they might not be worth it
 	}
 }
 
@@ -366,6 +396,9 @@ func (r *Runner) zeroBlocks() {
 	}
 }
 
+// Fatalf signals to the test runner that this test has failed.
+// It takes a fmt.Printf format string that is printed
+// when a minimal failing example has been found.
 func (r *Runner) Fatalf(format string, i ...interface{}) {
 	// TODO: make this hook into the shrinking and gofuzz
 	fmt.Printf(format, i...)
@@ -373,12 +406,22 @@ func (r *Runner) Fatalf(format string, i ...interface{}) {
 	panic(new(failed))
 }
 
+// Draw takes a generator and fills it with data. This is
+// used to get the data that might cause a failing example.
 func (r *Runner) Draw(g Generator) {
 	r.buf.StartExample()
 	g.Fill(r.buf)
 	r.buf.EndExample()
 }
 
+// Invalid signals to the test runner that the current data is
+// invalid and should no longer be considered. This is useful
+// for setting up assumptions like, "This float cannot be a NaN"
+// or "This string must be at least 5 bytes long"
+//
+// Invalid calls panic internally. The test function should
+// be aware of the non-local control-flow and use defers for
+// cleanup.
 func Invalid() {
 	panic(new(invalid))
 }
@@ -388,8 +431,21 @@ func (r *Runner) regularDraw(b *buffer, n int, smp Sample) []byte {
 	return r.rewriteNovelty(b, res)
 }
 
+// The Sample type is a function, used to return sample values
+// during the draw process. This is used to guide shrinking
+// towards values which are meaningful and interesting.
+//
+// Meaningful means "can be interpreted to become a value".
+// A good example of this is UTF-8 strings, where some
+// byte sequences aren't valid values.
+//
+// Interesting means, "may cause a failure". A good example
+// of an interesting value is floating point NaNs, which are
+// known to cause failure in many bits of code.
 type Sample func(r *rand.Rand, n int) []byte
 
+// Uniform is a Sample function that return uninterpreted random bytes
+// It's a convenience function for when any byte sequence is valid.
 func Uniform(r *rand.Rand, n int) []byte {
 	b := make([]byte, n)
 	r.Read(b)
