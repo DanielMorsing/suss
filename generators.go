@@ -335,6 +335,28 @@ func (r *Runner) Byte() byte {
 	return byte(b)
 }
 
+// Int63nGen generates a int64 between 0 and N, following
+// the pattern of the math/rand function. After Fill
+// the value can be read from Value
+type Int63nGen struct {
+	Value int64
+	N     int64
+}
+
+func (i *Int63nGen) Fill(d Data) {
+	bits := d.Draw(8, func(r *rand.Rand, n int) []byte {
+		var b [8]byte
+		val := r.Int63n(i.N)
+		binary.BigEndian.PutUint64(b[:], uint64(val))
+		return b[:]
+	})
+	val := int64(binary.BigEndian.Uint64(bits))
+	if val >= i.N || val < 0 {
+		Invalid()
+	}
+	i.Value = val
+}
+
 func biasBool(d Data, f float64) bool {
 	bits := d.Draw(1, func(r *rand.Rand, n int) []byte {
 		roll := r.Float64()
