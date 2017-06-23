@@ -109,9 +109,15 @@ func (s *SliceGen) Fill(d Data) {
 			return
 		}
 		l++
-		s.f()
-		d.EndExample()
+		sliceCall(s.f, d)
 	}
+}
+
+// Since slice functions can panic, make sure that we
+// always call d.EndExample
+func sliceCall(f func(), d Data) {
+	defer d.EndExample()
+	f()
 }
 
 // BoolGen implements a generator for boolean values.
