@@ -153,7 +153,7 @@ func (r *Runner) shrink() {
 			block := buf[u:v]
 			n := v - u
 
-			byt := make([]byte, len(r.lastBuf.buf))
+			byt := make([]byte, 0, len(r.lastBuf.buf))
 			for _, v := range r.lastBuf.blocks {
 				l := v[1] - v[0]
 				origblock := r.lastBuf.buf[v[0]:v[1]]
@@ -640,7 +640,12 @@ func (r *Runner) considerNewBuffer(b *buffer) bool {
 		return b.overdraw < r.lastBuf.overdraw
 	}
 	if b.status == statusInteresting {
-		// TODO add assertions here
+		if len(b.buf) > len(r.lastBuf.buf) {
+			panic("buffer grew in size")
+		}
+		if len(b.buf) == len(r.lastBuf.buf) && bytes.Compare(b.buf, r.lastBuf.buf) >= 0 {
+			panic("buffer grew in value")
+		}
 	}
 	return true
 }
