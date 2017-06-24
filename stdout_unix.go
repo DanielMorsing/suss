@@ -81,7 +81,7 @@ func getCopies() (stdout int, stderr int, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	stderr, err = unix.Dup(int(os.Stdout.Fd()))
+	stderr, err = unix.Dup(int(os.Stderr.Fd()))
 	if err != nil {
 		unix.Close(stdout)
 		return 0, 0, err
