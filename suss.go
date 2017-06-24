@@ -11,7 +11,9 @@ package suss
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math/rand"
+	"os"
 	"sort"
 	"testing"
 	"time"
@@ -80,9 +82,11 @@ func (r *Runner) Run(f func()) {
 			break
 		}
 		if time.Since(r.startTime) > 1*time.Second {
+			r.buf.discard()
 			return
 		}
 		if mutations >= 10 {
+			r.buf.discard()
 			r.newData()
 			mutations = 0
 			continue
@@ -91,16 +95,28 @@ func (r *Runner) Run(f func()) {
 		if r.considerNewBuffer(r.buf) {
 			r.lastBuf = r.buf
 		}
+		// this is not an interesting buffer, so we
+		// can discard its stdout regardless
+		r.buf.discard()
 		mut := r.newMutator()
 		r.buf = newBuffer(maxsize, mut)
 	}
 	// if we got here, that means that we have an interestinr.buffer
 	// That usually means a failing test, now try shrinking it
 	if r.buf.status != statusInteresting {
+		r.buf.discard()
 		return
 	}
 	r.lastBuf.finalize()
 	r.shrink()
+	// ok, open the output file and dump it on stdout
+	stdfile, err := os.Open(r.lastBuf.stdout)
+	if err != nil {
+		fmt.Println("could not open stdout: %v\n", err)
+	}
+	io.Copy(os.Stdout, stdfile)
+	stdfile.Close()
+	os.Remove(r.lastBuf.stdout)
 	r.t.FailNow()
 }
 
@@ -314,6 +330,13 @@ func (r *Runner) runOnce() {
 		}
 		panic(r)
 	}()
+	f, closefunc, err := redirectOutput()
+	if err != nil {
+		panic("could not redirect output:" + err.Error())
+	}
+	defer closefunc()
+	r.buf.stdout = f.Name()
+	f.Close()
 	r.testfunc()
 	r.buf.status = statusValid
 	testfail = false
@@ -350,10 +373,12 @@ func (r *Runner) tryShrink(byt []byte) bool {
 	r.tree.add(r.buf)
 	r.buf.finalize()
 	if r.considerNewBuffer(r.buf) {
+		r.lastBuf.discard()
 		r.change += 1
 		r.lastBuf = r.buf
 		return true
 	}
+	r.buf.discard()
 	return false
 }
 

@@ -2,6 +2,7 @@ package suss
 
 import (
 	"bytes"
+	"os"
 	"sort"
 )
 
@@ -24,6 +25,7 @@ type buffer struct {
 	nodeIndex  int
 	hitNovelty bool
 	finalized  bool
+	stdout     string
 
 	sortedInter [][2]int
 }
@@ -118,6 +120,15 @@ func (b *buffer) finalize() {
 			jbuf := b.buf[u:v]
 			return bytes.Compare(ibuf, jbuf) < 0
 		})
+	}
+}
+
+func (b *buffer) discard() {
+	if b.stdout != "" {
+		// TODO: figure out erroring here
+		// If we can create this file, we should be able to
+		// remove it
+		os.Remove(b.stdout)
 	}
 }
 
