@@ -320,9 +320,12 @@ func (r *Runner) runOnce() {
 }
 
 func (r *Runner) tryShrink(byt []byte) bool {
-	// TODO slice last_data
 	if r.lastBuf.status != statusInteresting {
 		panic("whoa")
+	}
+	s := r.lastBuf.index
+	if len(byt) > s {
+		byt = byt[:s]
 	}
 
 	i := 0
