@@ -147,29 +147,56 @@ func (r *Runner) Float64() float64 {
 // Float64Gen implements a generator for float64 values.
 type Float64Gen float64
 
+var nastyFloats = []float64{
+	0.0, 0.5, 1.0 / 3, 10e6, 10e-6, 1.175494351e-38, 2.2250738585072014e-308,
+	1.7976931348623157e+308, 3.402823466e+38, 9007199254740992, 1 - 10e-6,
+	2 + 10e-6, 1.192092896e-07, 2.2204460492503131e-016,
+}
+
+func init() {
+	n := []float64{math.NaN(), math.Inf(0)}
+	// add 5 NaN and Inf here, since they are more likely to
+	// cause failures.
+	for i := 0; i < 5; i++ {
+		nastyFloats = append(nastyFloats, n...)
+	}
+	for _, f := range nastyFloats {
+		nastyFloats = append(nastyFloats, -f)
+	}
+}
+
 func (f *Float64Gen) Fill(d Data) {
 	fbits := d.Draw(10, func(r *rand.Rand, n int) []byte {
 		if n != 10 {
 			panic("bad float size")
 		}
-		flavor := r.Intn(5)
+		flavor := r.Intn(10)
 		var f float64
-		switch flavor {
-		case 0:
-			f = math.NaN()
-		case 1:
-			f = math.Inf(0)
-		case 2:
-			f = math.Inf(-1)
-		case 3:
-			// TODO incorporate evil floats from hypothesis
-			f = 0
-		default:
-			f = r.Float64()
-			f *= math.MaxFloat64
+		switch {
+		case flavor <= 4:
+			f = nastyFloats[r.Intn(len(nastyFloats))]
+		case flavor == 5:
+			var b [10]byte
+			r.Read(b[:])
+			return b[:]
+		case flavor == 6:
+			f = r.Float64() * float64((r.Intn(2)*2)-1)
+		case flavor == 7:
+			f = r.NormFloat64()
+		case flavor == 8:
+			u := r.Int63()
 			if r.Intn(2) == 1 {
-				f = -f
+				u = -u
 			}
+			f = float64(u)
+		default:
+			u := r.Int63()
+			if r.Intn(2) == 1 {
+				u = -u
+			}
+			f = float64(u)
+			n := r.NormFloat64()
+			n += f
 		}
 		b := encodefloat64(f)
 		return b[:]
